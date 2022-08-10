@@ -1,5 +1,5 @@
-# Default Community Health Files
+# Honeycomb Field Utils
 
-This repository contains default community health files for repositories in the Honeycomb organization and will automatically be picked up if they are not overwritten.
+This repository contains a collection of tools and code made available to Honeycomb's customers by our field teams
 
-More details on this repository structure can be found here: https://docs.github.com/en/github/building-a-strong-community/creating-a-default-community-health-file
+These resources are meant to help Honeycomb customers but are not in themselves products maintained by the standard Honeycomb SDLC.  Please use them as example material for building your deploying your own Honeycomb assets.
