@@ -10,7 +10,15 @@ variable "refinery_logs_dataset" {
   default     = "Refinery Logs"
 }
 
-# variable "honeycomb_api_key" {
-#   description = "Honeycomb API key"
-#   type        = string
-# }
+variable "refinery_cluster_name" {
+  description = "Name of the refinery cluster"
+  type        = string
+  default     = "Production"
+}
+
+variable "honeycomb_api_key" {
+  description = "Honeycomb API key"
+  type        = string
+  default     = null
+  # You can supply this via the environment variable HONEYCOMB_API_KEY or by setting the value in a .tfvars file
+}

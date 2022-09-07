@@ -10,6 +10,7 @@ resource "honeycombio_query_annotation" "refinery-health-query" {
   name        = "Cache Health"
   description = "Overruns above 0 could mean needing to increase cache capacity. Memory at ~80% usage, the cache will be downsized to stop OOM's and thus could lead to overruns with a smaller capacity. cached_entries_max should give an idea about how many entries steady state in the cache."
 }
+
 resource "honeycombio_query" "refinery-intercommunication-query" {
   dataset    = var.refinery_metrics_dataset
   query_json = data.honeycombio_query_specification.refinery-intercommunication.json
@@ -55,13 +56,13 @@ resource "honeycombio_query_annotation" "refinery-dynsampler-rates-query" {
   dataset     = var.refinery_metrics_dataset
   query_id    = honeycombio_query.refinery-dynsampler-rates-query.id
   name        = "Sample Rates"
-  description = "Sample rates for the entire system."
+  description = "Sample rates from the dynamic sampler."
 }
 
 
 # Board definition
 resource "honeycombio_board" "refinery" {
-  name  = "Refinery Overview"
+  name  = "${var.refinery_cluster_name} Refinery Operations"
   style = "visual"
   query {
     query_id            = honeycombio_query.refinery-health-query.id
