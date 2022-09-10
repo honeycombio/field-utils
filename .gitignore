@@ -33,3 +33,6 @@ override.tf.json
 .terraformrc
 terraform.rc
 .terraform.lock.hcl
+
+# Cloudformation
+stack_parameters.json

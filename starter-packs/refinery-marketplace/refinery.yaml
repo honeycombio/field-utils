@@ -1,0 +1,902 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Honeycomb.io Refinery Cluster 0.1
+
+Parameters:
+  # Required Parameters
+  VPC:
+    Description: Choose VPC to use
+    Type: AWS::EC2::VPC::Id
+  RefineryServerSubnets:
+    Description: Provide a list of Subnet IDs for the Refinery Servers (must be within the specified VPC)
+    Type: List<AWS::EC2::Subnet::Id>
+  LoadBalancerSubnets:
+    Description: Provide a comma separated list of Subnet IDs for the load balancers (Leave blank to use the RefineryServerSubnets specified above)
+    Type: CommaDelimitedList
+    Default: ''
+  RedisSubnets:
+    Description: Provide a comma separated list of Subnet IDs for the Postgres database (Leave blank to use the RefineryServerSubnets specified above)
+    Type: CommaDelimitedList
+    Default: ''
+  SSLCertificateARN:
+    Description: SSL Certficate ARN for SSL Certficate
+    Type: String
+  # ImageId:
+  #   Description: The AMI ID to be used for launching instances
+  #   Type: AWS::EC2::Image::Id
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Default: '/aws/service/ami-amazon-linux-latest/al2022-ami-kernel-5.15-arm64'
+  SSHKeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: AWS::EC2::KeyPair::KeyName
+  RedisPassword:
+    Description: Enter Redis Password
+    NoEcho: true
+    Type: String
+  RefineryMetricsHoneycombAPIKey:
+    Description: The Honeycomb API Key for Refinery Metrics and Logs
+    NoEcho: true
+    Type: String
+  ContactEmail:
+    Description: Contact email for Cloudwatch notifications and instance tagging
+    Type: String
+  ContactDept:
+    Description: Contact department for billing purposes
+    Type: String
+  ###############################################################################
+  # Performance Settings
+  InstanceType:
+    Description: EC2 Instance type for Refinery (ARM)
+    Default: m6g.xlarge
+    Type: String
+    AllowedValues: [m6g.medium, m6g.large, m6g.xlarge, m6g.2xlarge, m6g.4xlarge, m6g.8xlarge,
+      r6g.medium, r6g.large, r6g.xlarge, r6g.2xlarge, r6g.4xlarge, r6g.8xlarge, r6g.12xlarge,
+      t4g.small, t4g.medium, t4g.large, t4g.xlarge, t4g.2xlarge]
+  MaxRefineryInstances:
+    Description: The maximum number of Refinery instances to launch
+    Type: Number
+    Default: 3
+  MinRefineryInstances:
+    Description: The minimum number of Refinery instances to launch
+    Type: Number
+    Default: 1
+  RedisInstanceType:
+    Description: EC2 Instance type for Elasticache (Low performance, t4g instance class recommended)
+    Default: cache.t4g.small
+    Type: String
+    AllowedValues: [cache.t4g.micro, cache.t4g.small, cache.t4g.medium,
+      cache.m6g.large, cache.m6g.xlarge]
+  RedisNumReplicas:
+    Description: 'Number of replicas per shard. 1 replica means HA, 0 means single node'
+    Type: 'Number'
+    Default: 1
+    MinValue: 0
+    MaxValue: 5
+  ###############################################################################
+  # Security Settings
+  LoadBalancerScheme:
+    Description: Network Scheme for the ELB
+    Type: String
+    Default: internet-facing
+    AllowedValues:
+    - 'internet-facing'
+    - 'internal'
+  LoadBalancerSecurityGroupId:
+    Description: Supply a security group for your load balancer (leave blank to have it created for you). Using the default security group is recommended.
+    Type: String
+    Default: ''
+  RefinerySecurityGroupId:
+    Description: Supply a security group for your Refinery frontends (leave blank to have it created for you). Using the default security group is recommended.
+    Type: String
+    Default: ''
+  InboundAdminSecurityGroupId:
+    Description: Select an existing Security Group in your VPC to define administrative ACLs (SSH, monitoring tools, etc) to the Refinery instances
+    Type: String
+    Default: ''
+  RefineryServerAssociatePublicIpAddress:
+    Description: Assign public IP addresses to the Refinery Servers or not
+    Type: String
+    Default: true
+    AllowedValues:
+    - true
+    - false
+  # RefineryServerIamRole:
+  #   Description: Supply an IAM Role for the Refinery Servers (leave blank to have it created for you). NOTE If you supply your own role, you must also provide an S3 Bucket which that role can access
+  #   Type: String
+  #   Default: ''
+  ###############################################################################
+  # Other Settings
+  Route53HostedZone:
+    Type: String
+    Default: ''
+    Description: Supply a Route 53 Hosted Zone name (eg. mydomain.com) for auto-creating a DNS record. Must NOT end in a dot. (Leave blank to disable)
+  Route53RecordName:
+    Type: String
+    Default: 'refinery'
+    Description: Supply a DNS record name that will be prepended to the Route 53 Hosted Zone
+  # SystemLogsGroup:
+  #   Description: The logical name of the Cloudwatch Logs log group for systemn logs
+  #   Type: String
+  # AppLogsGroup:
+  #   Description: The logical name of the Cloudwatch Logs log group for systemn logs
+  #   Type: String
+  # TemplateVersion:
+  #   Type: String
+  #   Default: "0.1"
+
+Metadata:
+  cfn-lint:
+    config:
+      ignore_checks:
+        - W2507
+        - W4002
+
+Conditions:
+  CreateRoute53Record:
+    !Not [!Equals [ !Ref Route53HostedZone, '' ] ]
+  UseServerSubnetsForLoadBalancers:
+    !Equals [ !Select [ 0, !Ref LoadBalancerSubnets], '' ]
+  UseServerSubnetsForRedis:
+    !Equals [ !Select [ 0, !Ref RedisSubnets], '' ]
+  CreateLoadBalancerSecurityGroup:
+    !Equals [ !Ref LoadBalancerSecurityGroupId, '' ]
+  CreateRefinerySecurityGroup:
+    !Equals [ !Ref RefinerySecurityGroupId, '' ]
+  UseInboundAdminSecurityGroup:
+    !Not [!Equals [ !Ref InboundAdminSecurityGroupId, '' ] ]
+  RedisHasAutomaticFailoverEnabled:
+    !Not [!Equals [!Ref RedisNumReplicas, 0]]
+
+Mappings:
+  # TODO - when we switch to packer building our own images
+  # cfn-ami-to-mapping -i ami-05f3141013eebdc12 -k arm64
+  # OR
+  # cfn-ami-to-mapping -n amzn2-ami-kernel-5.10-hvm-2.0.20220805.0-arm64-gp2 -k arm64
+  AMI:
+    ap-northeast-1:
+      arm64: ami-05827d651478a7791
+    ap-northeast-2:
+      arm64: ami-0c501dbf1131cb15e
+    ap-northeast-3:
+      arm64: ami-04f2675a55ac108da
+    ap-south-1:
+      arm64: ami-0e18b1d379af4e263
+    ap-southeast-1:
+      arm64: ami-0e64281826ea08b9e
+    ap-southeast-2:
+      arm64: ami-00fdb24828509782b
+    ca-central-1:
+      arm64: ami-065ab3db2b1fde8a5
+    eu-central-1:
+      arm64: ami-0854da2f8540b70a2
+    eu-north-1:
+      arm64: ami-00ca53272a3025ad4
+    eu-west-1:
+      arm64: ami-037bde7013647d23a
+    eu-west-2:
+      arm64: ami-06290d0872e939755
+    eu-west-3:
+      arm64: ami-0e0d3ede1da0fa3d0
+    sa-east-1:
+      arm64: ami-06e9415c3372121a2
+    us-east-1:
+      arm64: ami-05f3141013eebdc12
+    us-east-2:
+      arm64: ami-0da7236b7a69cf265
+    us-west-1:
+      arm64: ami-08b83c17eb5834a05
+    us-west-2:
+      arm64: ami-07c02c38124bd75bd
+
+Resources:
+# Security Groups
+#########################################################################################
+  RefinerySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateRefinerySecurityGroup
+    Properties:
+      GroupDescription: Ingress and Egress rules for Refinery
+      SecurityGroupEgress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 0
+        IpProtocol: tcp
+        ToPort: 65535
+      SecurityGroupIngress:
+      - FromPort: 8080
+        IpProtocol: tcp
+        SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
+        ToPort: 8080
+      - FromPort: 9090
+        IpProtocol: tcp
+        SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
+        ToPort: 9090
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-Refinery-SG
+      VpcId: !Ref VPC
+
+  RefinerySecurityGroupPeerTraffic:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: CreateRefinerySecurityGroup
+    Properties:
+      GroupId: !Ref RefinerySecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref RefinerySecurityGroup
+      FromPort: 8081
+      ToPort: 8081
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateLoadBalancerSecurityGroup
+    Properties:
+      GroupDescription: Setup Ingress/Egress for Automate Load Balancer
+      SecurityGroupEgress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 0
+        IpProtocol: tcp
+        ToPort: 65535
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 9090
+        IpProtocol: tcp
+        ToPort: 9090
+      - CidrIp: 0.0.0.0/0
+        FromPort: 443
+        IpProtocol: tcp
+        ToPort: 443
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-ELB-SG
+      VpcId: !Ref VPC
+
+  AlertNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint:
+            !Ref ContactEmail
+          Protocol: email
+
+# Refinery Autoscale
+#########################################################################################
+  RefineryAutoScaleGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      MixedInstancesPolicy:
+        InstancesDistribution:
+          OnDemandBaseCapacity: 0
+          OnDemandPercentageAboveBaseCapacity: 0
+          SpotAllocationStrategy: capacity-optimized
+        LaunchTemplate:
+          LaunchTemplateSpecification:
+            LaunchTemplateId: !Ref RefineryLaunchTemplate
+            Version: !GetAtt RefineryLaunchTemplate.LatestVersionNumber
+      # LaunchConfigurationName: !Ref ServerLaunchConfig
+      TargetGroupARNs:
+      - !Ref RefineryTargetGroup
+      MaxSize: !Sub '${MaxRefineryInstances}'
+      MinSize: !Sub '${MinRefineryInstances}'
+      HealthCheckGracePeriod: 300
+      HealthCheckType: ELB
+      NotificationConfigurations:
+      - TopicARN: !Ref AlertNotificationTopic
+        NotificationTypes:
+        - autoscaling:EC2_INSTANCE_LAUNCH
+        - autoscaling:EC2_INSTANCE_LAUNCH_ERROR
+        - autoscaling:EC2_INSTANCE_TERMINATE
+        - autoscaling:EC2_INSTANCE_TERMINATE_ERROR
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-frontend
+        PropagateAtLaunch: true
+      - Key: X-Dept
+        Value: !Ref ContactDept
+        PropagateAtLaunch: true
+      - Key: X-Contact
+        Value: !Ref ContactEmail
+        PropagateAtLaunch: true
+      VPCZoneIdentifier: !Ref RefineryServerSubnets
+
+
+  FrontendAutoScaleUpPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref RefineryAutoScaleGroup
+      Cooldown: '60'
+      ScalingAdjustment: 1
+
+  FrontendAutoScaleDownPolicy:
+    Type: AWS::AutoScaling::ScalingPolicy
+    Properties:
+      AdjustmentType: ChangeInCapacity
+      AutoScalingGroupName: !Ref RefineryAutoScaleGroup
+      Cooldown: '60'
+      ScalingAdjustment: -1
+
+  # RefineryInstanceProfile:
+  #   Type: AWS::IAM::InstanceProfile
+  #   Properties:
+  #     Path: /
+  #     Roles:
+  #     - !Ref RefineryServerIamRole
+
+  RefineryALB:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      SecurityGroups:
+        - !Ref LoadBalancerSecurityGroupId
+      Subnets: !If [UseServerSubnetsForLoadBalancers, !Ref RefineryServerSubnets, !Ref LoadBalancerSubnets ]
+      # IpAddressType: dualstack
+      Scheme: !Ref LoadBalancerScheme
+      Tags:
+        - Key: Name
+          Value: !Sub refinery-${AWS::StackName}
+        - Key: StackName
+          Value: !Sub ${AWS::StackName}
+        - Key: X-Dept
+          Value: !Ref ContactDept
+        - Key: X-Contact
+          Value: !Ref ContactEmail
+
+  RefineryALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+        Certificates:
+          - CertificateArn: !Ref SSLCertificateARN
+        LoadBalancerArn: !Ref RefineryALB
+        Port: 443
+        Protocol: HTTPS
+        SslPolicy: ELBSecurityPolicy-TLS-1-2-2017-01
+        DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref RefineryTargetGroup
+
+  RefineryTargetGroup:
+      Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+      Properties:
+        HealthCheckIntervalSeconds: 10
+        UnhealthyThresholdCount: 3
+        HealthyThresholdCount: 2
+        HealthCheckPath: /alive
+        VpcId: !Ref VPC
+        Port: 8080
+        Protocol: HTTP
+        Tags:
+          - Key: X-Dept
+            Value: !Ref ContactDept
+          - Key: X-Contact
+            Value: !Ref ContactEmail
+
+  RefineryLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
+    Properties:
+      LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
+      LaunchTemplateData:
+        ImageId: !Ref LatestAmiId
+        InstanceType: !Ref InstanceType
+        NetworkInterfaces:
+        - DeviceIndex: 0
+          AssociatePublicIpAddress: !Ref RefineryServerAssociatePublicIpAddress
+          Groups:
+          - !If [CreateRefinerySecurityGroup , !Ref RefinerySecurityGroup, !Ref RefinerySecurityGroupId]
+          - !If [UseInboundAdminSecurityGroup, !Ref InboundAdminSecurityGroupId, !Ref AWS::NoValue]
+        EbsOptimized: true
+        KeyName: !Ref SSHKeyName
+        UserData:
+          "Fn::Base64": !Sub |
+            #!/bin/bash -ex
+            # Execute AWS::CloudFormation::Init
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource RefineryLaunchTemplate --region ${AWS::Region}
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          default: [install_refinery, refinery_config, monitoring]
+        # Install the RPM first, then overwrite the default config files and start it up
+        install_refinery:
+          commands:
+            01_install:
+              command: |
+                curl -L -o /tmp/refinery.rpm https://github.com/honeycombio/refinery/releases/download/v1.15.0/refinery-1.15.0-1.aarch64.rpm
+                rpm -ivh /tmp/refinery.rpm
+        refinery_config:
+          files:
+            /etc/refinery/refinery.toml:
+              content: !Sub |
+                ListenAddr = "0.0.0.0:8080"
+                GRPCListenAddr = "0.0.0.0:9090"
+                PeerListenAddr = "0.0.0.0:8081"
+                CompressPeerCommunication = true
+                APIKeys = [
+                  "*",                   # wildcard accept all keys
+                  ]
+                HoneycombAPI = "https://api.honeycomb.io"
+                SendDelay = "2s"
+                TraceTimeout = "60s"
+                MaxBatchSize = 500
+                SendTicker = "100ms"
+                LoggingLevel = "debug"
+                UpstreamBufferSize = 10000
+                PeerBufferSize = 10000
+                AddHostMetadataToTrace = true
+                Collector = "InMemCollector"
+                Logger = "honeycomb"
+                Metrics = "honeycomb"
+                [PeerManagement]
+                Type = "redis"
+                RedisHost = "${ReplicationGroup.PrimaryEndPoint.Address}:${ReplicationGroup.PrimaryEndPoint.Port}"
+                # RedisPassword = "${RedisPassword}"
+                UseTLS = false
+                # UseTLSInsecure = false
+                # IdentifierInterfaceName = "eth1"
+                [InMemCollector]
+                CacheCapacity = 1000
+                MaxAlloc = 0
+                [HoneycombLogger]
+                LoggerHoneycombAPI = "https://api.honeycomb.io"
+                LoggerAPIKey = "${RefineryMetricsHoneycombAPIKey}"
+                LoggerDataset = "Refinery Logs"
+                LoggerSamplerEnabled = true
+                LoggerSamplerThroughput = 10
+                [HoneycombMetrics]
+                MetricsHoneycombAPI = "https://api.honeycomb.io"
+                MetricsAPIKey = "${RefineryMetricsHoneycombAPIKey}"
+                MetricsDataset = "Refinery Metrics"
+                MetricsReportingInterval = 60
+            /etc/refinery/rules.toml:
+              content: |
+                DryRun = false
+                SampleRate = 1
+
+                [dev]
+                  Sampler = "RulesBasedSampler"
+                  # 'dev.rule' is how you specify an environment-wide rule
+                  # This drops all healthchecks across an environment.
+                  [[dev.rule]]
+                    name = "drop healthchecks"
+                    drop = true
+                    [[dev.rule.condition]]
+                      field = "http.route"
+                      operator = "="
+                      value = "/health"
+
+                  # This keeps all 500 errors across an environment.
+                  [[dev.rule]]
+                    name = "keep 500 errors"
+                    SampleRate = 1
+                    [[dev.rule.condition]]
+                      field = "http.status_code"
+                      operator = ">="
+                      value = 500
+
+                  [[dev.rule]]
+                    name = "keep all registrations"
+                    SampleRate = 1
+                    [[dev.rule.condition]]
+                      field = "http.route"
+                      operator = "="
+                      value = "/api/v0/user/register"
+
+                  [[dev.rule]]
+                    name = "dynamically sample all logins"
+                    [[dev.rule.condition]]
+                      field = "http.route"
+                      operator = "="
+                      value = "/api/v0/user/login"
+                    [dev.rule.sampler.EMADynamicSampler]
+                      Sampler = "EMADynamicSampler"
+                      AddSampleRateKeyToTrace = true
+                      AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.logins"
+                      FieldList = ["http.status_code", "readz.login.user_id"]
+                      GoalSampleRate = 50
+
+                  # This dynamically samples all 200 responses across an environment.
+                  [[dev.rule]]
+                    name = "dynamically sample stories created by users"
+                    [[dev.rule.condition]]
+                      field = "status_code"
+                      operator = "="
+                      value = 201
+                    [[dev.rule.conditions]]
+                      field = "http.route"
+                      operator = "="
+                      value = "/api/v0/write/<story_type>"
+                    [dev.rule.sampler.EMADynamicSampler]
+                      Sampler = "EMADynamicSampler"
+                      AddSampleRateKeyToTrace = true
+                      AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.200s"
+                      FieldList = ["http.target", "readz.post_story.user_id"]
+                      GoalSampleRate = 15
+
+                  # This dynamically samples all 200 responses across an environment.
+                  [[dev.rule]]
+                    name = "dynamically sample 200 responses"
+                    [[dev.rule.condition]]
+                      field = "status_code"
+                      operator = "<="
+                      value = 299
+                    [dev.rule.sampler.EMADynamicSampler]
+                      Sampler = "EMADynamicSampler"
+                      AddSampleRateKeyToTrace = true
+                      AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.200s"
+                      FieldList = ["http.target"]
+                      GoalSampleRate = 15
+
+                  [[dev.rule]]
+                    SampleRate = 10 # default when no rules match, if missing defaults to 10
+          commands:
+            02_start:
+              command: |
+                /usr/bin/systemctl enable refinery
+                /usr/bin/systemctl start refinery
+        monitoring:
+          # packages:
+          #   yum:
+          #     amazon-cloudwatch-agent: []
+          files:
+            /etc/systemd/system/otel-collector.service:
+              content: !Sub |
+                [Unit]
+                Description=otel-collector
+                After=network.target
+                #
+                [Service]
+                Environment="HNY_API_KEY=${RefineryMetricsHoneycombAPIKey}"
+                Environment="HNY_DATASET=hostmetrics"
+                Environment="OTEL_RESOURCE_ATTRIBUTES='service.name=refinery,deployment.environment=${AWS::StackName}"
+                ExecStart=/usr/local/bin/otelcol --config /etc/honeycomb-metrics-config.yaml
+                Restart=always
+                #
+                [Install]
+                WantedBy=multi-user.target
+          commands:
+            03_otel_collector:
+              command: |
+                curl -o /usr/local/bin/otelcol -L https://github.com/honeycombio/opentelemetry-collector-configs/releases/download/v1.4.0/otelcol_hny_linux_arm64
+                curl -o /etc/honeycomb-metrics-config.yaml -L https://github.com/honeycombio/opentelemetry-collector-configs/releases/download/v1.4.0/honeycomb-metrics-config.yaml
+                chmod +x /usr/local/bin/otelcol
+                systemctl daemon-reload && systemctl start otel-collector
+
+  # ServerLaunchConfig:
+  #   Type: AWS::AutoScaling::LaunchConfiguration
+  #   Properties:
+  #     AssociatePublicIpAddress: !Ref RefineryServerAssociatePublicIpAddress
+  #     EbsOptimized: true
+  #     # BlockDeviceMappings:
+  #     # - DeviceName: /dev/sda1
+  #     #   Ebs:
+  #     #     VolumeSize: 20
+  #     #     VolumeType: gp2
+  #     #     DeleteOnTermination: true
+  #     # IamInstanceProfile: !Ref RefineryInstanceProfile
+  #     ImageId: !Ref LatestAmiId
+  #     InstanceType: !Ref InstanceType
+  #     KeyName: !Ref SSHKeyName
+  #     SecurityGroups:
+  #     - !If [CreateRefinerySecurityGroup , !Ref RefinerySecurityGroup, !Ref RefinerySecurityGroupId]
+  #     UserData:
+  #       "Fn::Base64": !Sub |
+  #         #!/bin/bash -ex
+  #         # Uncomment this next line before going to production, note: It can cause instances to cycle rapidly, watch Cloudwatch Logs for errors
+  #         # trap "aws autoscaling set-instance-health --health-status Unhealthy --region ${AWS::Region} --instance-id $(curl -s http://169.254.169.254/latest/meta-data/instance-id)" ERR
+  #         # Execute AWS::CloudFormation::Init
+  #         /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ServerLaunchConfig --region ${AWS::Region}
+  #   Metadata:
+  #     AWS::CloudFormation::Init:
+  #       configSets:
+  #         default: [install_refinery, refinery_config, monitoring]
+  #       # Install the RPM first, then overwrite the default config files and start it up
+  #       install_refinery:
+  #         commands:
+  #           01_install:
+  #             command: |
+  #               curl -L -o /tmp/refinery.rpm https://github.com/honeycombio/refinery/releases/download/v1.15.0/refinery-1.15.0-1.aarch64.rpm
+  #               rpm -ivh /tmp/refinery.rpm
+  #       refinery_config:
+  #         files:
+  #           /tmp/config.toml:
+  #             content: !Sub |
+  #               ListenAddr = "0.0.0.0:8080"
+  #               GRPCListenAddr = "0.0.0.0:9090"
+  #               PeerListenAddr = "0.0.0.0:8081"
+  #               CompressPeerCommunication = true
+  #               APIKeys = [
+  #                 "*",                   # wildcard accept all keys
+  #                 ]
+  #               HoneycombAPI = "https://api.honeycomb.io"
+  #               SendDelay = "2s"
+  #               TraceTimeout = "60s"
+  #               MaxBatchSize = 500
+  #               SendTicker = "100ms"
+  #               LoggingLevel = "debug"
+  #               UpstreamBufferSize = 10000
+  #               PeerBufferSize = 10000
+  #               AddHostMetadataToTrace = true
+  #               Collector = "InMemCollector"
+  #               Logger = "honeycomb"
+  #               Metrics = "honeycomb"
+  #               [PeerManagement]
+  #               Type = "redis"
+  #               RedisHost = "${ReplicationGroup.PrimaryEndPoint.Address}"
+  #               # RedisPassword = "${RedisPassword}"
+  #               UseTLS = false
+  #               # UseTLSInsecure = false
+  #               # IdentifierInterfaceName = "eth1"
+  #               [InMemCollector]
+  #               CacheCapacity = 1000
+  #               MaxAlloc = 0
+  #               [HoneycombLogger]
+  #               LoggerHoneycombAPI = "https://api.honeycomb.io"
+  #               LoggerAPIKey = "${RefineryMetricsHoneycombAPIKey}"
+  #               LoggerDataset = "Refinery Logs"
+  #               LoggerSamplerEnabled = true
+  #               LoggerSamplerThroughput = 10
+  #               [HoneycombMetrics]
+  #               MetricsHoneycombAPI = "https://api.honeycomb.io"
+  #               MetricsAPIKey = "${RefineryMetricsHoneycombAPIKey}"
+  #               MetricsDataset = "Refinery Metrics"
+  #               MetricsReportingInterval = 60
+  #           /tmp/rules.toml.cfn:
+  #             content: |
+  #               DryRun = false
+  #               SampleRate = 1
+
+  #               [dev]
+  #                 Sampler = "RulesBasedSampler"
+  #                 # 'dev.rule' is how you specify an environment-wide rule
+  #                 # This drops all healthchecks across an environment.
+  #                 [[dev.rule]]
+  #                   name = "drop healthchecks"
+  #                   drop = true
+  #                   [[dev.rule.condition]]
+  #                     field = "http.route"
+  #                     operator = "="
+  #                     value = "/health"
+
+  #                 # This keeps all 500 errors across an environment.
+  #                 [[dev.rule]]
+  #                   name = "keep 500 errors"
+  #                   SampleRate = 1
+  #                   [[dev.rule.condition]]
+  #                     field = "http.status_code"
+  #                     operator = ">="
+  #                     value = 500
+
+  #                 [[dev.rule]]
+  #                   name = "keep all registrations"
+  #                   SampleRate = 1
+  #                   [[dev.rule.condition]]
+  #                     field = "http.route"
+  #                     operator = "="
+  #                     value = "/api/v0/user/register"
+
+  #                 [[dev.rule]]
+  #                   name = "dynamically sample all logins"
+  #                   [[dev.rule.condition]]
+  #                     field = "http.route"
+  #                     operator = "="
+  #                     value = "/api/v0/user/login"
+  #                   [dev.rule.sampler.EMADynamicSampler]
+  #                     Sampler = "EMADynamicSampler"
+  #                     AddSampleRateKeyToTrace = true
+  #                     AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.logins"
+  #                     FieldList = ["http.status_code", "readz.login.user_id"]
+  #                     GoalSampleRate = 50
+
+  #                 # This dynamically samples all 200 responses across an environment.
+  #                 [[dev.rule]]
+  #                   name = "dynamically sample stories created by users"
+  #                   [[dev.rule.condition]]
+  #                     field = "status_code"
+  #                     operator = "="
+  #                     value = 201
+  #                   [[dev.rule.conditions]]
+  #                     field = "http.route"
+  #                     operator = "="
+  #                     value = "/api/v0/write/<story_type>"
+  #                   [dev.rule.sampler.EMADynamicSampler]
+  #                     Sampler = "EMADynamicSampler"
+  #                     AddSampleRateKeyToTrace = true
+  #                     AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.200s"
+  #                     FieldList = ["http.target", "readz.post_story.user_id"]
+  #                     GoalSampleRate = 15
+
+  #                 # This dynamically samples all 200 responses across an environment.
+  #                 [[dev.rule]]
+  #                   name = "dynamically sample 200 responses"
+  #                   [[dev.rule.condition]]
+  #                     field = "status_code"
+  #                     operator = "<="
+  #                     value = 299
+  #                   [dev.rule.sampler.EMADynamicSampler]
+  #                     Sampler = "EMADynamicSampler"
+  #                     AddSampleRateKeyToTrace = true
+  #                     AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.200s"
+  #                     FieldList = ["http.target"]
+  #                     GoalSampleRate = 15
+
+  #                 [[dev.rule]]
+  #                   SampleRate = 10 # default when no rules match, if missing defaults to 10
+  #         commands:
+  #           02_start:
+  #             command: |
+  #               /usr/bin/systemctl enable refinery
+  #               /usr/bin/systemctl start refinery
+  #       monitoring:
+  #         # packages:
+  #         #   yum:
+  #         #     amazon-cloudwatch-agent: []
+  #         files:
+  #           /etc/systemd/system/otel-collector.service:
+  #             content: !Sub |
+  #               [Unit]
+  #               Description=otel-collector
+  #               After=network.target
+  #               #
+  #               [Service]
+  #               Environment="HNY_API_KEY=${RefineryMetricsHoneycombAPIKey}"
+  #               Environment="HNY_DATASET=hostmetrics"
+  #               Environment="OTEL_RESOURCE_ATTRIBUTES='service.name=refinery,deployment.environment=${AWS::StackName}"
+  #               ExecStart=/usr/local/bin/otelcol --config /etc/honeycomb-metrics-config.yaml
+  #               Restart=always
+  #               #
+  #               [Install]
+  #               WantedBy=multi-user.target
+  #         commands:
+  #           03_otel_collector:
+  #             command: |
+  #               curl -o /usr/local/bin/otelcol -L https://github.com/honeycombio/opentelemetry-collector-configs/releases/download/v1.4.0/otelcol_hny_linux_arm64
+  #               curl -o /etc/honeycomb-metrics-config.yaml -L https://github.com/honeycombio/opentelemetry-collector-configs/releases/download/v1.4.0/honeycomb-metrics-config.yaml
+  #               chmod +x /usr/local/bin/otelcol
+  #               systemctl daemon-reload && systemctl start otel-collector
+
+
+# Redis Cluster
+#########################################################################################
+  RedisParameterGroup:
+    Type: 'AWS::ElastiCache::ParameterGroup'
+    Properties:
+      CacheParameterGroupFamily: 'redis6.x'
+      Description: !Ref 'AWS::StackName'
+      Properties: {}
+
+  RedisSubnetGroupName:
+    Type: 'AWS::ElastiCache::SubnetGroup'
+    Properties:
+      Description: !Ref 'AWS::StackName'
+      SubnetIds: !If [UseServerSubnetsForRedis , !Ref RefineryServerSubnets, !Ref RedisSubnets ]
+
+  RedisSecurityGroup:
+    Type: 'AWS::EC2::SecurityGroup'
+    Properties:
+      GroupDescription: !Ref 'AWS::StackName'
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 6379
+        ToPort: 6379
+        SourceSecurityGroupId: !If [CreateRefinerySecurityGroup , !Ref RefinerySecurityGroup, !Ref RefinerySecurityGroupId]
+
+  ReplicationGroup:
+    DeletionPolicy: Snapshot
+    UpdateReplacePolicy: Snapshot
+    Type: 'AWS::ElastiCache::ReplicationGroup'
+    Properties:
+      ReplicationGroupDescription: !Ref 'AWS::StackName'
+      AtRestEncryptionEnabled: true
+      # AuthToken: !If [HasAuthToken, !Ref AuthToken, !Ref 'AWS::NoValue']
+      AutomaticFailoverEnabled: !If [RedisHasAutomaticFailoverEnabled, true, false]
+      MultiAZEnabled: !If [RedisHasAutomaticFailoverEnabled, true, false]
+      CacheNodeType: !Ref RedisInstanceType
+      CacheParameterGroupName: !Ref RedisParameterGroup
+      CacheSubnetGroupName: !Ref RedisSubnetGroupName
+      Engine: redis
+      EngineVersion: '6.x'
+      NotificationTopicArn: !Ref AlertNotificationTopic
+      NumNodeGroups: 1
+      ReplicasPerNodeGroup: !Ref RedisNumReplicas
+      PreferredMaintenanceWindow: 'sat:07:00-sat:08:00'
+      SecurityGroupIds:
+      - !Ref RedisSecurityGroup
+      SnapshotRetentionLimit: 0
+      SnapshotWindow: '00:00-03:00'
+      # TransitEncryptionEnabled: !Ref TransitEncryption
+    UpdatePolicy:
+      UseOnlineResharding: true
+
+
+# Route 53 Record
+#########################################################################################
+  RefineryLBDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateRoute53Record
+    Properties:
+      HostedZoneName: !Sub ${Route53HostedZone}.
+      Name: !Sub ${Route53RecordName}.${Route53HostedZone}.
+      Comment: !Sub Created by Cloudformation ${AWS::StackName}
+      Type: CNAME
+      TTL: 900
+      ResourceRecords:
+      - !GetAtt RefineryALB.DNSName
+
+# Monitoring
+#########################################################################################
+  ELB5XXExceeded:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub AppELB_5XX_Exceeded-${AWS::StackName}
+      AlarmDescription: Alarms when an 5xx requests exceed a specified threshold.
+      AlarmActions: [!Ref AlertNotificationTopic]
+      MetricName: HTTPCode_ELB_5XX_Count
+      Namespace: AWS/ApplicationELB
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: 2
+      Period: 60
+      Statistic: Sum
+      Threshold: 10
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt RefineryALB.LoadBalancerFullName
+
+  FETGUnhealthyHosts:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub Refinery-FE-TG-Unhealthy-Hosts-${AWS::StackName}
+      AlarmDescription: Alarms when UnHealthyHostCount is greater than threshold.
+      AlarmActions: [!Ref AlertNotificationTopic]
+      MetricName: UnHealthyHostCount
+      Namespace: AWS/ApplicationELB
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: 2
+      Period: 60
+      Statistic: Sum
+      Threshold: 1
+      Dimensions:
+        - Name: LoadBalancer
+          Value: !GetAtt RefineryALB.LoadBalancerFullName
+        - Name: TargetGroup
+          Value: !GetAtt RefineryTargetGroup.TargetGroupFullName
+
+  CPUAlarmHigh:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub CPUAlarmHigh-${AWS::StackName}
+      AlarmDescription: Scale up when CPU > 80% for 5 minutes
+      AlarmActions: [!Ref FrontendAutoScaleUpPolicy]
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      EvaluationPeriods: 5
+      Period: 60
+      Statistic: Average
+      Threshold: 80
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref RefineryAutoScaleGroup
+
+  CPUAlarmLow:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub CPUAlarmLow-${AWS::StackName}
+      AlarmDescription: Scale down when CPU < 40% for 10 minutes
+      AlarmActions: [!Ref FrontendAutoScaleDownPolicy]
+      MetricName: CPUUtilization
+      Namespace: AWS/EC2
+      ComparisonOperator: LessThanOrEqualToThreshold
+      EvaluationPeriods: 10
+      Period: 60
+      Statistic: Average
+      Threshold: 40
+      Dimensions:
+        - Name: AutoScalingGroupName
+          Value: !Ref RefineryAutoScaleGroup
+
+Outputs:
+  DNSName:
+    Description: The DNS name of the load balancer
+    Value: !If [CreateRoute53Record, !Sub "${Route53RecordName}.${Route53HostedZone}", !GetAtt RefineryALB.DNSName]
+    Export:
+      Name: !Sub "${AWS::StackName}-DNSName"
+  StackName:
+    Description: The name of this stack, as an export
+    Value: !Ref AWS::StackName

@@ -1,0 +1,54 @@
+[
+  {
+    "ParameterKey": "VPC",
+    "ParameterValue": "vpc-0d677c66d5cdc97e0"
+  },
+  {
+    "ParameterKey": "RefineryServerSubnets",
+    "ParameterValue": "subnet-0f0eab0f7fc909926,subnet-03e4cf727f1fc133e,subnet-0dc7f0a33be3e7c46,subnet-08e43d740470ccac9"
+  },
+  {
+    "ParameterKey": "InboundAdminSecurityGroupId",
+    "ParameterValue": "sg-069e5e9f5613c2947"
+  },
+  {
+    "ParameterKey": "SSHKeyName",
+    "ParameterValue": "id_rsa"
+  },
+  {
+    "ParameterKey": "ContactEmail",
+    "ParameterValue": "me@mycompany.com"
+  },
+  {
+    "ParameterKey": "ContactDept",
+    "ParameterValue": "SRE"
+  },
+  {
+    "ParameterKey": "RedisPassword",
+    "ParameterValue": "SuperSecurePassword"
+  },
+  {
+    "ParameterKey": "RefineryMetricsHoneycombAPIKey",
+    "ParameterValue": "MyHoneycombAPIKey"
+  },
+  {
+    "ParameterKey": "SSLCertificateARN",
+    "ParameterValue": "arn:aws:acm:us-west-2:939020690662:certificate/77e79522-31c0-4403-8c53-4f835040530b"
+  },
+  {
+    "ParameterKey": "InstanceType",
+    "ParameterValue": "m6g.large"
+  },
+  {
+    "ParameterKey": "MaxRefineryInstances",
+    "ParameterValue": "3"
+  },
+  {
+    "ParameterKey": "Route53RecordName",
+    "ParameterValue": "refinery"
+  },
+  {
+    "ParameterKey": "Route53HostedZone",
+    "ParameterValue": "route53.mycompany.com"
+  }
+]
