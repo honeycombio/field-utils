@@ -271,9 +271,9 @@ Resources:
           LaunchTemplateSpecification:
             LaunchTemplateId: !Ref RefineryLaunchTemplate
             Version: !GetAtt RefineryLaunchTemplate.LatestVersionNumber
-      # LaunchConfigurationName: !Ref ServerLaunchConfig
       TargetGroupARNs:
       - !Ref RefineryTargetGroup
+      - !Ref RefineryGrpcTargetGroup
       MaxSize: !Sub '${MaxRefineryInstances}'
       MinSize: !Sub '${MinRefineryInstances}'
       HealthCheckGracePeriod: 300
@@ -352,6 +352,22 @@ Resources:
         - Type: forward
           TargetGroupArn: !Ref RefineryTargetGroup
 
+  RefineryGrpcListenerRule:
+    Type: "AWS::ElasticLoadBalancingV2::ListenerRule"
+    Properties:
+      Actions:
+        - Type: forward
+          TargetGroupArn: !Ref RefineryGrpcTargetGroup
+      Conditions:
+        - Field: http-header
+          HttpHeaderConfig:
+            HttpHeaderName: content-type
+            Values:
+            - application/grpc
+            - application/grpc-web
+      ListenerArn: !Ref RefineryALBListener
+      Priority: 1
+
   RefineryTargetGroup:
       Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
       Properties:
@@ -362,6 +378,23 @@ Resources:
         VpcId: !Ref VPC
         Port: 8080
         Protocol: HTTP
+        Tags:
+          - Key: X-Dept
+            Value: !Ref ContactDept
+          - Key: X-Contact
+            Value: !Ref ContactEmail
+
+  RefineryGrpcTargetGroup:
+      Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+      Properties:
+        VpcId: !Ref VPC
+        Port: 9090
+        Protocol: HTTP
+        ProtocolVersion: GRPC
+        HealthCheckIntervalSeconds: 10
+        UnhealthyThresholdCount: 3
+        HealthyThresholdCount: 2
+        HealthCheckPath: /
         Tags:
           - Key: X-Dept
             Value: !Ref ContactDept
@@ -556,200 +589,6 @@ Resources:
                 curl -o /etc/honeycomb-metrics-config.yaml -L https://github.com/honeycombio/opentelemetry-collector-configs/releases/download/v1.4.0/honeycomb-metrics-config.yaml
                 chmod +x /usr/local/bin/otelcol
                 systemctl daemon-reload && systemctl start otel-collector
-
-  # ServerLaunchConfig:
-  #   Type: AWS::AutoScaling::LaunchConfiguration
-  #   Properties:
-  #     AssociatePublicIpAddress: !Ref RefineryServerAssociatePublicIpAddress
-  #     EbsOptimized: true
-  #     # BlockDeviceMappings:
-  #     # - DeviceName: /dev/sda1
-  #     #   Ebs:
-  #     #     VolumeSize: 20
-  #     #     VolumeType: gp2
-  #     #     DeleteOnTermination: true
-  #     # IamInstanceProfile: !Ref RefineryInstanceProfile
-  #     ImageId: !Ref LatestAmiId
-  #     InstanceType: !Ref InstanceType
-  #     KeyName: !Ref SSHKeyName
-  #     SecurityGroups:
-  #     - !If [CreateRefinerySecurityGroup , !Ref RefinerySecurityGroup, !Ref RefinerySecurityGroupId]
-  #     UserData:
-  #       "Fn::Base64": !Sub |
-  #         #!/bin/bash -ex
-  #         # Uncomment this next line before going to production, note: It can cause instances to cycle rapidly, watch Cloudwatch Logs for errors
-  #         # trap "aws autoscaling set-instance-health --health-status Unhealthy --region ${AWS::Region} --instance-id $(curl -s http://169.254.169.254/latest/meta-data/instance-id)" ERR
-  #         # Execute AWS::CloudFormation::Init
-  #         /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource ServerLaunchConfig --region ${AWS::Region}
-  #   Metadata:
-  #     AWS::CloudFormation::Init:
-  #       configSets:
-  #         default: [install_refinery, refinery_config, monitoring]
-  #       # Install the RPM first, then overwrite the default config files and start it up
-  #       install_refinery:
-  #         commands:
-  #           01_install:
-  #             command: |
-  #               curl -L -o /tmp/refinery.rpm https://github.com/honeycombio/refinery/releases/download/v1.15.0/refinery-1.15.0-1.aarch64.rpm
-  #               rpm -ivh /tmp/refinery.rpm
-  #       refinery_config:
-  #         files:
-  #           /tmp/config.toml:
-  #             content: !Sub |
-  #               ListenAddr = "0.0.0.0:8080"
-  #               GRPCListenAddr = "0.0.0.0:9090"
-  #               PeerListenAddr = "0.0.0.0:8081"
-  #               CompressPeerCommunication = true
-  #               APIKeys = [
-  #                 "*",                   # wildcard accept all keys
-  #                 ]
-  #               HoneycombAPI = "https://api.honeycomb.io"
-  #               SendDelay = "2s"
-  #               TraceTimeout = "60s"
-  #               MaxBatchSize = 500
-  #               SendTicker = "100ms"
-  #               LoggingLevel = "debug"
-  #               UpstreamBufferSize = 10000
-  #               PeerBufferSize = 10000
-  #               AddHostMetadataToTrace = true
-  #               Collector = "InMemCollector"
-  #               Logger = "honeycomb"
-  #               Metrics = "honeycomb"
-  #               [PeerManagement]
-  #               Type = "redis"
-  #               RedisHost = "${ReplicationGroup.PrimaryEndPoint.Address}"
-  #               # RedisPassword = "${RedisPassword}"
-  #               UseTLS = false
-  #               # UseTLSInsecure = false
-  #               # IdentifierInterfaceName = "eth1"
-  #               [InMemCollector]
-  #               CacheCapacity = 1000
-  #               MaxAlloc = 0
-  #               [HoneycombLogger]
-  #               LoggerHoneycombAPI = "https://api.honeycomb.io"
-  #               LoggerAPIKey = "${RefineryMetricsHoneycombAPIKey}"
-  #               LoggerDataset = "Refinery Logs"
-  #               LoggerSamplerEnabled = true
-  #               LoggerSamplerThroughput = 10
-  #               [HoneycombMetrics]
-  #               MetricsHoneycombAPI = "https://api.honeycomb.io"
-  #               MetricsAPIKey = "${RefineryMetricsHoneycombAPIKey}"
-  #               MetricsDataset = "Refinery Metrics"
-  #               MetricsReportingInterval = 60
-  #           /tmp/rules.toml.cfn:
-  #             content: |
-  #               DryRun = false
-  #               SampleRate = 1
-
-  #               [dev]
-  #                 Sampler = "RulesBasedSampler"
-  #                 # 'dev.rule' is how you specify an environment-wide rule
-  #                 # This drops all healthchecks across an environment.
-  #                 [[dev.rule]]
-  #                   name = "drop healthchecks"
-  #                   drop = true
-  #                   [[dev.rule.condition]]
-  #                     field = "http.route"
-  #                     operator = "="
-  #                     value = "/health"
-
-  #                 # This keeps all 500 errors across an environment.
-  #                 [[dev.rule]]
-  #                   name = "keep 500 errors"
-  #                   SampleRate = 1
-  #                   [[dev.rule.condition]]
-  #                     field = "http.status_code"
-  #                     operator = ">="
-  #                     value = 500
-
-  #                 [[dev.rule]]
-  #                   name = "keep all registrations"
-  #                   SampleRate = 1
-  #                   [[dev.rule.condition]]
-  #                     field = "http.route"
-  #                     operator = "="
-  #                     value = "/api/v0/user/register"
-
-  #                 [[dev.rule]]
-  #                   name = "dynamically sample all logins"
-  #                   [[dev.rule.condition]]
-  #                     field = "http.route"
-  #                     operator = "="
-  #                     value = "/api/v0/user/login"
-  #                   [dev.rule.sampler.EMADynamicSampler]
-  #                     Sampler = "EMADynamicSampler"
-  #                     AddSampleRateKeyToTrace = true
-  #                     AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.logins"
-  #                     FieldList = ["http.status_code", "readz.login.user_id"]
-  #                     GoalSampleRate = 50
-
-  #                 # This dynamically samples all 200 responses across an environment.
-  #                 [[dev.rule]]
-  #                   name = "dynamically sample stories created by users"
-  #                   [[dev.rule.condition]]
-  #                     field = "status_code"
-  #                     operator = "="
-  #                     value = 201
-  #                   [[dev.rule.conditions]]
-  #                     field = "http.route"
-  #                     operator = "="
-  #                     value = "/api/v0/write/<story_type>"
-  #                   [dev.rule.sampler.EMADynamicSampler]
-  #                     Sampler = "EMADynamicSampler"
-  #                     AddSampleRateKeyToTrace = true
-  #                     AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.200s"
-  #                     FieldList = ["http.target", "readz.post_story.user_id"]
-  #                     GoalSampleRate = 15
-
-  #                 # This dynamically samples all 200 responses across an environment.
-  #                 [[dev.rule]]
-  #                   name = "dynamically sample 200 responses"
-  #                   [[dev.rule.condition]]
-  #                     field = "status_code"
-  #                     operator = "<="
-  #                     value = 299
-  #                   [dev.rule.sampler.EMADynamicSampler]
-  #                     Sampler = "EMADynamicSampler"
-  #                     AddSampleRateKeyToTrace = true
-  #                     AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.200s"
-  #                     FieldList = ["http.target"]
-  #                     GoalSampleRate = 15
-
-  #                 [[dev.rule]]
-  #                   SampleRate = 10 # default when no rules match, if missing defaults to 10
-  #         commands:
-  #           02_start:
-  #             command: |
-  #               /usr/bin/systemctl enable refinery
-  #               /usr/bin/systemctl start refinery
-  #       monitoring:
-  #         # packages:
-  #         #   yum:
-  #         #     amazon-cloudwatch-agent: []
-  #         files:
-  #           /etc/systemd/system/otel-collector.service:
-  #             content: !Sub |
-  #               [Unit]
-  #               Description=otel-collector
-  #               After=network.target
-  #               #
-  #               [Service]
-  #               Environment="HNY_API_KEY=${RefineryMetricsHoneycombAPIKey}"
-  #               Environment="HNY_DATASET=hostmetrics"
-  #               Environment="OTEL_RESOURCE_ATTRIBUTES='service.name=refinery,deployment.environment=${AWS::StackName}"
-  #               ExecStart=/usr/local/bin/otelcol --config /etc/honeycomb-metrics-config.yaml
-  #               Restart=always
-  #               #
-  #               [Install]
-  #               WantedBy=multi-user.target
-  #         commands:
-  #           03_otel_collector:
-  #             command: |
-  #               curl -o /usr/local/bin/otelcol -L https://github.com/honeycombio/opentelemetry-collector-configs/releases/download/v1.4.0/otelcol_hny_linux_arm64
-  #               curl -o /etc/honeycomb-metrics-config.yaml -L https://github.com/honeycombio/opentelemetry-collector-configs/releases/download/v1.4.0/honeycomb-metrics-config.yaml
-  #               chmod +x /usr/local/bin/otelcol
-  #               systemctl daemon-reload && systemctl start otel-collector
-
 
 # Redis Cluster
 #########################################################################################
