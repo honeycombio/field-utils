@@ -20,9 +20,6 @@ Parameters:
   SSLCertificateARN:
     Description: SSL Certficate ARN for SSL Certficate
     Type: String
-  # ImageId:
-  #   Description: The AMI ID to be used for launching instances
-  #   Type: AWS::EC2::Image::Id
   LatestAmiId:
     Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
     Default: '/aws/service/ami-amazon-linux-latest/al2022-ami-kernel-5.15-arm64'
@@ -100,12 +97,6 @@ Parameters:
     AllowedValues:
     - true
     - false
-  # RefineryServerIamRole:
-  #   Description: Supply an IAM Role for the Refinery Servers (leave blank to have it created for you). NOTE If you supply your own role, you must also provide an S3 Bucket which that role can access
-  #   Type: String
-  #   Default: ''
-  ###############################################################################
-  # Other Settings
   Route53HostedZone:
     Type: String
     Default: ''
@@ -114,12 +105,6 @@ Parameters:
     Type: String
     Default: 'refinery'
     Description: Supply a DNS record name that will be prepended to the Route 53 Hosted Zone
-  # SystemLogsGroup:
-  #   Description: The logical name of the Cloudwatch Logs log group for systemn logs
-  #   Type: String
-  # AppLogsGroup:
-  #   Description: The logical name of the Cloudwatch Logs log group for systemn logs
-  #   Type: String
   # TemplateVersion:
   #   Type: String
   #   Default: "0.1"
@@ -147,46 +132,14 @@ Conditions:
   RedisHasAutomaticFailoverEnabled:
     !Not [!Equals [!Ref RedisNumReplicas, 0]]
 
-Mappings:
-  # TODO - when we switch to packer building our own images
-  # cfn-ami-to-mapping -i ami-05f3141013eebdc12 -k arm64
-  # OR
-  # cfn-ami-to-mapping -n amzn2-ami-kernel-5.10-hvm-2.0.20220805.0-arm64-gp2 -k arm64
-  AMI:
-    ap-northeast-1:
-      arm64: ami-05827d651478a7791
-    ap-northeast-2:
-      arm64: ami-0c501dbf1131cb15e
-    ap-northeast-3:
-      arm64: ami-04f2675a55ac108da
-    ap-south-1:
-      arm64: ami-0e18b1d379af4e263
-    ap-southeast-1:
-      arm64: ami-0e64281826ea08b9e
-    ap-southeast-2:
-      arm64: ami-00fdb24828509782b
-    ca-central-1:
-      arm64: ami-065ab3db2b1fde8a5
-    eu-central-1:
-      arm64: ami-0854da2f8540b70a2
-    eu-north-1:
-      arm64: ami-00ca53272a3025ad4
-    eu-west-1:
-      arm64: ami-037bde7013647d23a
-    eu-west-2:
-      arm64: ami-06290d0872e939755
-    eu-west-3:
-      arm64: ami-0e0d3ede1da0fa3d0
-    sa-east-1:
-      arm64: ami-06e9415c3372121a2
-    us-east-1:
-      arm64: ami-05f3141013eebdc12
-    us-east-2:
-      arm64: ami-0da7236b7a69cf265
-    us-west-1:
-      arm64: ami-08b83c17eb5834a05
-    us-west-2:
-      arm64: ami-07c02c38124bd75bd
+# Mappings:
+#   # TODO - when we switch to packer building our own images
+#   # cfn-ami-to-mapping -i ami-05f3141013eebdc12 -k arm64
+#   # OR
+#   # cfn-ami-to-mapping -n amzn2-ami-kernel-5.10-hvm-2.0.20220805.0-arm64-gp2 -k arm64
+#   AMI:
+#     us-west-2:
+#       arm64: ami-07c02c38124bd75bd
 
 Resources:
 # Security Groups
@@ -313,13 +266,6 @@ Resources:
       AutoScalingGroupName: !Ref RefineryAutoScaleGroup
       Cooldown: '60'
       ScalingAdjustment: -1
-
-  # RefineryInstanceProfile:
-  #   Type: AWS::IAM::InstanceProfile
-  #   Properties:
-  #     Path: /
-  #     Roles:
-  #     - !Ref RefineryServerIamRole
 
   RefineryALB:
     Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
@@ -563,9 +509,6 @@ Resources:
                 /usr/bin/systemctl enable refinery
                 /usr/bin/systemctl start refinery
         monitoring:
-          # packages:
-          #   yum:
-          #     amazon-cloudwatch-agent: []
           files:
             /etc/systemd/system/otel-collector.service:
               content: !Sub |
