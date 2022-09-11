@@ -9,25 +9,16 @@ Parameters:
   RefineryServerSubnets:
     Description: Provide a list of Subnet IDs for the Refinery Servers (must be within the specified VPC)
     Type: List<AWS::EC2::Subnet::Id>
-  LoadBalancerSubnets:
-    Description: Provide a comma separated list of Subnet IDs for the load balancers (Leave blank to use the RefineryServerSubnets specified above)
-    Type: CommaDelimitedList
-    Default: ''
-  RedisSubnets:
-    Description: Provide a comma separated list of Subnet IDs for the Postgres database (Leave blank to use the RefineryServerSubnets specified above)
-    Type: CommaDelimitedList
-    Default: ''
   SSLCertificateARN:
     Description: SSL Certficate ARN for SSL Certficate
     Type: String
-  LatestAmiId:
-    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
-    Default: '/aws/service/ami-amazon-linux-latest/al2022-ami-kernel-5.15-arm64'
+    MinLength: 10
+    AllowedPattern: ^arn:aws:acm:[a-z]{2}-[a-z]+-\d{1}:[0-9]{12}:certificate/[a-zA-Z0-9-]+
   SSHKeyName:
     Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
     Type: AWS::EC2::KeyPair::KeyName
   RedisPassword:
-    Description: Enter Redis Password
+    Description: Redis Authentication Password
     NoEcho: true
     Type: String
     MinLength: 16
@@ -37,6 +28,9 @@ Parameters:
     Description: The Honeycomb API Key for Refinery Metrics and Logs
     NoEcho: true
     Type: String
+  AdminSecurityGroupId:
+    Description: Select an existing Security Group in your VPC to define administrative ACLs (SSH, monitoring tools, etc) to the Refinery instances.
+    Type: AWS::EC2::SecurityGroup::Id
   ContactEmail:
     Description: Contact email for Cloudwatch notifications and instance tagging
     Type: String
@@ -74,6 +68,14 @@ Parameters:
     MaxValue: 5
   ###############################################################################
   # Security Settings
+  LoadBalancerSubnets:
+    Description: Provide a comma separated list of Subnet IDs for the load balancers (Leave blank to use the RefineryServerSubnets specified above)
+    Type: CommaDelimitedList
+    Default: ''
+  RedisSubnets:
+    Description: Provide a comma separated list of Subnet IDs for the Postgres database (Leave blank to use the RefineryServerSubnets specified above)
+    Type: CommaDelimitedList
+    Default: ''
   LoadBalancerScheme:
     Description: Network Scheme for the ELB
     Type: String
@@ -82,15 +84,11 @@ Parameters:
     - 'internet-facing'
     - 'internal'
   LoadBalancerSecurityGroupId:
-    Description: Supply a security group for your load balancer (leave blank to have it created for you). Using the default security group is recommended.
+    Description: Supply a security group for your load balancer (leave blank to have it created for you, recommended).
     Type: String
     Default: ''
   RefinerySecurityGroupId:
-    Description: Supply a security group for your Refinery frontends (leave blank to have it created for you). Using the default security group is recommended.
-    Type: String
-    Default: ''
-  InboundAdminSecurityGroupId:
-    Description: Select an existing Security Group in your VPC to define administrative ACLs (SSH, monitoring tools, etc) to the Refinery instances
+    Description: Supply a security group for your Refinery frontends (leave blank to have it created for you, recommended).
     Type: String
     Default: ''
   RefineryServerAssociatePublicIpAddress:
@@ -100,6 +98,8 @@ Parameters:
     AllowedValues:
     - true
     - false
+  ###############################################################################
+  # Optional Settings
   Route53HostedZone:
     Type: String
     Default: ''
@@ -108,6 +108,10 @@ Parameters:
     Type: String
     Default: 'refinery'
     Description: Supply a DNS record name that will be prepended to the Route 53 Hosted Zone
+  LatestAmiId:
+    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+    Description: Pointer to the latest AL2022 AMI, do not change
+    Default: '/aws/service/ami-amazon-linux-latest/al2022-ami-kernel-5.15-arm64'
   # TemplateVersion:
   #   Type: String
   #   Default: "0.1"
@@ -118,6 +122,43 @@ Metadata:
       ignore_checks:
         - W2507
         - W4002
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Required Parameters"
+        Parameters:
+          - VPC
+          - RefineryServerSubnets
+          - SSLCertificateARN
+          - SSHKeyName
+          - RedisPassword
+          - RefineryMetricsHoneycombAPIKey
+          - AdminSecurityGroupId
+          - ContactEmail
+          - ContactDept
+      - Label:
+          default: "Performance Settings"
+        Parameters:
+          - InstanceType
+          - MaxRefineryInstances
+          - MinRefineryInstances
+          - RedisInstanceType
+          - RedisNumReplicas
+      - Label:
+          default: "Security Settings"
+        Parameters:
+          - LoadBalancerSubnets
+          - RefineryServerAssociatePublicIpAddress
+          - RedisSubnets
+          - LoadBalancerScheme
+          - LoadBalancerSecurityGroupId
+          - RefinerySecurityGroupId
+      - Label:
+          default: "Optional Parameters"
+        Parameters:
+          - Route53HostedZone
+          - Route53RecordName
+          - LatestAmiId
 
 Conditions:
   CreateRoute53Record:
@@ -130,8 +171,6 @@ Conditions:
     !Equals [ !Ref LoadBalancerSecurityGroupId, '' ]
   CreateRefinerySecurityGroup:
     !Equals [ !Ref RefinerySecurityGroupId, '' ]
-  UseInboundAdminSecurityGroup:
-    !Not [!Equals [ !Ref InboundAdminSecurityGroupId, '' ] ]
   RedisHasAutomaticFailoverEnabled:
     !Not [!Equals [!Ref RedisNumReplicas, 0]]
 
@@ -232,7 +271,8 @@ Resources:
       - !Ref RefineryGrpcTargetGroup
       MaxSize: !Sub '${MaxRefineryInstances}'
       MinSize: !Sub '${MinRefineryInstances}'
-      HealthCheckGracePeriod: 300
+      DesiredCapacity: !Sub '${MinRefineryInstances}'
+      HealthCheckGracePeriod: 30
       HealthCheckType: ELB
       NotificationConfigurations:
       - TopicARN: !Ref AlertNotificationTopic
@@ -362,7 +402,7 @@ Resources:
           AssociatePublicIpAddress: !Ref RefineryServerAssociatePublicIpAddress
           Groups:
           - !If [CreateRefinerySecurityGroup , !Ref RefinerySecurityGroup, !Ref RefinerySecurityGroupId]
-          - !If [UseInboundAdminSecurityGroup, !Ref InboundAdminSecurityGroupId, !Ref AWS::NoValue]
+          - !Ref AdminSecurityGroupId
         EbsOptimized: true
         KeyName: !Ref SSHKeyName
         UserData:

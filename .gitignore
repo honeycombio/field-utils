@@ -36,3 +36,6 @@ terraform.rc
 
 # Cloudformation
 stack_parameters.json
+
+# Macs
+.DS_Store
