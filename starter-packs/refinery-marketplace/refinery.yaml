@@ -30,6 +30,9 @@ Parameters:
     Description: Enter Redis Password
     NoEcho: true
     Type: String
+    MinLength: 16
+    MaxLength: 128
+    AllowedPattern: ^[0-9a-zA-Z!&#$^<>-]*$
   RefineryMetricsHoneycombAPIKey:
     Description: The Honeycomb API Key for Refinery Metrics and Logs
     NoEcho: true
@@ -404,8 +407,8 @@ Resources:
                 [PeerManagement]
                 Type = "redis"
                 RedisHost = "${ReplicationGroup.PrimaryEndPoint.Address}:${ReplicationGroup.PrimaryEndPoint.Port}"
-                # RedisPassword = "${RedisPassword}"
-                UseTLS = false
+                RedisPassword = "${RedisPassword}"
+                UseTLS = true
                 # UseTLSInsecure = false
                 # IdentifierInterfaceName = "eth1"
                 [InMemCollector]
@@ -566,7 +569,7 @@ Resources:
     Properties:
       ReplicationGroupDescription: !Ref 'AWS::StackName'
       AtRestEncryptionEnabled: true
-      # AuthToken: !If [HasAuthToken, !Ref AuthToken, !Ref 'AWS::NoValue']
+      AuthToken: !Ref RedisPassword
       AutomaticFailoverEnabled: !If [RedisHasAutomaticFailoverEnabled, true, false]
       MultiAZEnabled: !If [RedisHasAutomaticFailoverEnabled, true, false]
       CacheNodeType: !Ref RedisInstanceType
@@ -582,7 +585,7 @@ Resources:
       - !Ref RedisSecurityGroup
       SnapshotRetentionLimit: 0
       SnapshotWindow: '00:00-03:00'
-      # TransitEncryptionEnabled: !Ref TransitEncryption
+      TransitEncryptionEnabled: true
     UpdatePolicy:
       UseOnlineResharding: true
 
