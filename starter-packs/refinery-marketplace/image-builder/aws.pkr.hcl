@@ -37,6 +37,7 @@ source "amazon-ebs" "al2022" {
     source_image_name = "{{ .SourceAMIName }}"
     ami_type          = "al2022arm"
     ami_version       = "0.1"
+    Name              = "Honeycomb Refinery Marketplace Image"
   }
 
   ami_regions = [
@@ -52,7 +53,7 @@ source "amazon-ebs" "al2022" {
     // "eu-west-2",
     // "eu-west-3",
     // "sa-east-1",
-    // "us-east-1",
+    "us-east-1",
     // "us-east-2",
     // "us-west-1",
     "us-west-2",
@@ -72,7 +73,7 @@ build {
 
   provisioner "shell" {
     environment_vars = [
-      "REFINERY_RELEASE=1.15.0",
+      "REFINERY_RELEASE=1.16.0",
       "OTEL_CONFIG_RELEASE=1.4.0"
     ]
     scripts = [

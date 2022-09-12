@@ -108,10 +108,10 @@ Parameters:
     Type: String
     Default: 'refinery'
     Description: Supply a DNS record name that will be prepended to the Route 53 Hosted Zone
-  LatestAmiId:
-    Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
-    Description: Pointer to the latest AL2022 AMI, do not change
-    Default: '/aws/service/ami-amazon-linux-latest/al2022-ami-kernel-5.15-arm64'
+  # LatestAmiId:
+  #   Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
+  #   Description: Pointer to the latest AL2022 AMI, do not change
+  #   Default: '/aws/service/ami-amazon-linux-latest/al2022-ami-kernel-5.15-arm64'
   # TemplateVersion:
   #   Type: String
   #   Default: "0.1"
@@ -158,7 +158,6 @@ Metadata:
         Parameters:
           - Route53HostedZone
           - Route53RecordName
-          - LatestAmiId
 
 Conditions:
   CreateRoute53Record:
@@ -174,14 +173,14 @@ Conditions:
   RedisHasAutomaticFailoverEnabled:
     !Not [!Equals [!Ref RedisNumReplicas, 0]]
 
-# Mappings:
-#   # TODO - when we switch to packer building our own images
-#   # cfn-ami-to-mapping -i ami-05f3141013eebdc12 -k arm64
-#   # OR
-#   # cfn-ami-to-mapping -n amzn2-ami-kernel-5.10-hvm-2.0.20220805.0-arm64-gp2 -k arm64
-#   AMI:
-#     us-west-2:
-#       arm64: ami-07c02c38124bd75bd
+Mappings:
+  # To generate:
+  # cfn-ami-to-mapping -n refinery-marketplace-image-builder-202209121514 -k arm64
+  AMIRegionMap:
+    us-east-1:
+      arm64: ami-068ecec9b7f6fe34f
+    us-west-2:
+      arm64: ami-0d3ee0a514cdb51b5
 
 Resources:
 # Security Groups
@@ -271,8 +270,8 @@ Resources:
       - !Ref RefineryGrpcTargetGroup
       MaxSize: !Sub '${MaxRefineryInstances}'
       MinSize: !Sub '${MinRefineryInstances}'
-      DesiredCapacity: !Sub '${MinRefineryInstances}'
-      HealthCheckGracePeriod: 30
+      DesiredCapacity: !Sub '${MaxRefineryInstances}'
+      HealthCheckGracePeriod: 0
       HealthCheckType: ELB
       NotificationConfigurations:
       - TopicARN: !Ref AlertNotificationTopic
@@ -395,7 +394,7 @@ Resources:
     Properties:
       LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
       LaunchTemplateData:
-        ImageId: !Ref LatestAmiId
+        ImageId: !FindInMap [AMIRegionMap, !Ref "AWS::Region", arm64]
         InstanceType: !Ref InstanceType
         NetworkInterfaces:
         - DeviceIndex: 0
@@ -413,14 +412,14 @@ Resources:
     Metadata:
       AWS::CloudFormation::Init:
         configSets:
-          default: [install_refinery, refinery_config, monitoring]
-        # Install the RPM first, then overwrite the default config files and start it up
-        install_refinery:
-          commands:
-            01_install:
-              command: |
-                curl -L -o /tmp/refinery.rpm https://github.com/honeycombio/refinery/releases/download/v1.15.0/refinery-1.15.0-1.aarch64.rpm
-                rpm -ivh /tmp/refinery.rpm
+          default: [refinery_config, monitoring]
+        # RPM Installation is done in the Marketplace image, because AWS bans marketplace AMIs from downloading things
+        # install_refinery:
+        #   commands:
+        #     01_install:
+        #       command: |
+        #         curl -L -o /tmp/refinery.rpm https://github.com/honeycombio/refinery/releases/download/v1.15.0/refinery-1.15.0-1.aarch64.rpm
+        #         rpm -ivh /tmp/refinery.rpm
         refinery_config:
           files:
             /etc/refinery/refinery.toml:
@@ -441,25 +440,29 @@ Resources:
                 UpstreamBufferSize = 10000
                 PeerBufferSize = 10000
                 AddHostMetadataToTrace = true
+                QueryAuthToken = "JolkienRolkienRolkienTolkien"
+                AddRuleReasonToTrace = true
                 Collector = "InMemCollector"
                 Logger = "honeycomb"
                 Metrics = "honeycomb"
+
                 [PeerManagement]
                 Type = "redis"
                 RedisHost = "${ReplicationGroup.PrimaryEndPoint.Address}:${ReplicationGroup.PrimaryEndPoint.Port}"
                 RedisPassword = "${RedisPassword}"
                 UseTLS = true
-                # UseTLSInsecure = false
-                # IdentifierInterfaceName = "eth1"
+
                 [InMemCollector]
                 CacheCapacity = 1000
                 MaxAlloc = 0
+
                 [HoneycombLogger]
                 LoggerHoneycombAPI = "https://api.honeycomb.io"
                 LoggerAPIKey = "${RefineryMetricsHoneycombAPIKey}"
                 LoggerDataset = "Refinery Logs"
                 LoggerSamplerEnabled = true
                 LoggerSamplerThroughput = 10
+
                 [HoneycombMetrics]
                 MetricsHoneycombAPI = "https://api.honeycomb.io"
                 MetricsAPIKey = "${RefineryMetricsHoneycombAPIKey}"
@@ -571,9 +574,6 @@ Resources:
           commands:
             03_otel_collector:
               command: |
-                curl -o /usr/local/bin/otelcol -L https://github.com/honeycombio/opentelemetry-collector-configs/releases/download/v1.4.0/otelcol_hny_linux_arm64
-                curl -o /etc/honeycomb-metrics-config.yaml -L https://github.com/honeycombio/opentelemetry-collector-configs/releases/download/v1.4.0/honeycomb-metrics-config.yaml
-                chmod +x /usr/local/bin/otelcol
                 systemctl daemon-reload && systemctl start otel-collector
 
 # Redis Cluster
@@ -686,7 +686,7 @@ Resources:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmName: !Sub CPUAlarmHigh-${AWS::StackName}
-      AlarmDescription: Scale up when CPU > 80% for 5 minutes
+      AlarmDescription: Scale up when CPU > 60% for 5 minutes
       AlarmActions: [!Ref FrontendAutoScaleUpPolicy]
       MetricName: CPUUtilization
       Namespace: AWS/EC2
@@ -694,7 +694,7 @@ Resources:
       EvaluationPeriods: 5
       Period: 60
       Statistic: Average
-      Threshold: 80
+      Threshold: 60
       Dimensions:
         - Name: AutoScalingGroupName
           Value: !Ref RefineryAutoScaleGroup
