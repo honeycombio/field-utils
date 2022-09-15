@@ -1,3 +1,16 @@
+resource "honeycombio_column" "libhoney_peer_queue_overflow" {
+  key_name    = "libhoney_peer_queue_overflow"
+  type        = "float"
+  dataset = var.refinery_metrics_dataset
+}
+
+resource "honeycombio_column" "libhoney_peer_send_errors" {
+  key_name    = "libhoney_peer_send_errors"
+  type        = "float"
+  dataset = var.refinery_metrics_dataset
+}
+
+
 data "honeycombio_query_specification" "refinery-send-buffers" {
   calculation {
     op     = "SUM"
@@ -26,6 +39,11 @@ data "honeycombio_query_specification" "refinery-send-buffers" {
 
   breakdowns = ["hostname"]
   time_range = 86400
+
+  depends_on = [
+    honeycombio_column.libhoney_peer_queue_overflow,
+    honeycombio_column.libhoney_peer_send_errors,
+  ]
 }
 
 resource "honeycombio_query" "refinery-send-buffers-query" {

@@ -223,7 +223,7 @@ Resources:
     Type: AWS::EC2::SecurityGroup
     Condition: CreateLoadBalancerSecurityGroup
     Properties:
-      GroupDescription: Setup Ingress/Egress for Automate Load Balancer
+      GroupDescription: Setup Ingress/Egress for Refinery Load Balancer
       SecurityGroupEgress:
       - CidrIp: 0.0.0.0/0
         FromPort: 0
@@ -313,7 +313,7 @@ Resources:
     Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
     Properties:
       SecurityGroups:
-        - !Ref LoadBalancerSecurityGroupId
+        - !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
       Subnets: !If [UseServerSubnetsForLoadBalancers, !Ref RefineryServerSubnets, !Ref LoadBalancerSubnets ]
       # IpAddressType: dualstack
       Scheme: !Ref LoadBalancerScheme
@@ -453,7 +453,7 @@ Resources:
                 UseTLS = true
 
                 [InMemCollector]
-                CacheCapacity = 1000
+                CacheCapacity = 10000
                 MaxAlloc = 0
 
                 [HoneycombLogger]
