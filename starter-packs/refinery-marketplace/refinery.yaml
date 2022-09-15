@@ -269,7 +269,7 @@ Resources:
       - !Ref RefineryTargetGroup
       - !Ref RefineryGrpcTargetGroup
       MaxSize: !Sub '${MaxRefineryInstances}'
-      MinSize: !Sub '${MinRefineryInstances}'
+      MinSize: !Sub '${MaxRefineryInstances}'
       DesiredCapacity: !Sub '${MaxRefineryInstances}'
       HealthCheckGracePeriod: 0
       HealthCheckType: ELB
@@ -436,7 +436,7 @@ Resources:
                 TraceTimeout = "60s"
                 MaxBatchSize = 500
                 SendTicker = "100ms"
-                LoggingLevel = "debug"
+                LoggingLevel = "info"
                 UpstreamBufferSize = 10000
                 PeerBufferSize = 10000
                 AddHostMetadataToTrace = true
@@ -452,9 +452,10 @@ Resources:
                 RedisPassword = "${RedisPassword}"
                 UseTLS = true
 
+                # based on 4gb ram
                 [InMemCollector]
-                CacheCapacity = 10000
-                MaxAlloc = 0
+                CacheCapacity = 343597
+                MaxAlloc = 3435973836
 
                 [HoneycombLogger]
                 LoggerHoneycombAPI = "https://api.honeycomb.io"
@@ -473,82 +474,17 @@ Resources:
                 DryRun = false
                 SampleRate = 1
 
-                [dev]
-                  Sampler = "RulesBasedSampler"
-                  # 'dev.rule' is how you specify an environment-wide rule
-                  # This drops all healthchecks across an environment.
-                  [[dev.rule]]
-                    name = "drop healthchecks"
-                    drop = true
-                    [[dev.rule.condition]]
-                      field = "http.route"
-                      operator = "="
-                      value = "/health"
+                [Irving]
+                  Sampler = "EMADynamicSampler"
+                  GoalSampleRate = 10
+                  FieldList = ["status_code","request.path","response.status_code"]
+                  UseTraceLength = false
+                  AddSampleRateKeyToTrace = true
+                  AddSampleRateKeyToTraceField = "meta.refinery.dynsampler_key"
+                  AdjustmentInterval = 60
+                  MaxKeys = 10000
+                  Weight = 0.5
 
-                  # This keeps all 500 errors across an environment.
-                  [[dev.rule]]
-                    name = "keep 500 errors"
-                    SampleRate = 1
-                    [[dev.rule.condition]]
-                      field = "http.status_code"
-                      operator = ">="
-                      value = 500
-
-                  [[dev.rule]]
-                    name = "keep all registrations"
-                    SampleRate = 1
-                    [[dev.rule.condition]]
-                      field = "http.route"
-                      operator = "="
-                      value = "/api/v0/user/register"
-
-                  [[dev.rule]]
-                    name = "dynamically sample all logins"
-                    [[dev.rule.condition]]
-                      field = "http.route"
-                      operator = "="
-                      value = "/api/v0/user/login"
-                    [dev.rule.sampler.EMADynamicSampler]
-                      Sampler = "EMADynamicSampler"
-                      AddSampleRateKeyToTrace = true
-                      AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.logins"
-                      FieldList = ["http.status_code", "readz.login.user_id"]
-                      GoalSampleRate = 50
-
-                  # This dynamically samples all 200 responses across an environment.
-                  [[dev.rule]]
-                    name = "dynamically sample stories created by users"
-                    [[dev.rule.condition]]
-                      field = "status_code"
-                      operator = "="
-                      value = 201
-                    [[dev.rule.conditions]]
-                      field = "http.route"
-                      operator = "="
-                      value = "/api/v0/write/<story_type>"
-                    [dev.rule.sampler.EMADynamicSampler]
-                      Sampler = "EMADynamicSampler"
-                      AddSampleRateKeyToTrace = true
-                      AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.200s"
-                      FieldList = ["http.target", "readz.post_story.user_id"]
-                      GoalSampleRate = 15
-
-                  # This dynamically samples all 200 responses across an environment.
-                  [[dev.rule]]
-                    name = "dynamically sample 200 responses"
-                    [[dev.rule.condition]]
-                      field = "status_code"
-                      operator = "<="
-                      value = 299
-                    [dev.rule.sampler.EMADynamicSampler]
-                      Sampler = "EMADynamicSampler"
-                      AddSampleRateKeyToTrace = true
-                      AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.200s"
-                      FieldList = ["http.target"]
-                      GoalSampleRate = 15
-
-                  [[dev.rule]]
-                    SampleRate = 10 # default when no rules match, if missing defaults to 10
           commands:
             02_start:
               command: |
