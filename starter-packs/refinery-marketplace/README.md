@@ -17,6 +17,31 @@ Features:
 You can launch this stack with the push of a button:
 <p><a href="https://console.aws.amazon.com/cloudformation/home#/stacks/new?templateURL=https:%2F%2Fs3.amazonaws.com%2Frefinery-marketplace-test%2Frefinery.yaml&amp;stackName=Refinery-Prod" target="_blank"><img src="https://s3.amazonaws.com/cloudformation-examples/cloudformation-launch-stack.png" alt="Launch Stack" /></a></p>
 
+or via the aws CLI:
+```bash
+# clone and edit the stack parameters
+cp stack_parameters.json.example stack_parameters.json
+code stack_parameters.json
+
+aws cloudformation create-stack \
+  --template-url https://s3.amazonaws.com/refinery-marketplace-test/refinery.yaml \
+  --stack-name Refinery-Prod \
+  --capabilities CAPABILITY_IAM \
+  --on-failure DO_NOTHING \
+  --parameters file://stack_parameters.json
+
+# To update a parameter or pick up a new stack version
+aws cloudformation update-stack \
+  --template-url https://s3.amazonaws.com/refinery-marketplace-test/refinery.yaml \
+  --stack-name refinery-test \
+  --capabilities CAPABILITY_IAM \
+  --parameters file://stack_parameters.json
+```
+
+## Architecture Diagram
+
+![Architecture Diagram](diagram.svg)
+
 ## TODO
 * Better solution for Refinery rules file management & distribution
 * Automatically tune `CacheCapacity`, `MaxAlloc` and buffer sizes based on instance size
