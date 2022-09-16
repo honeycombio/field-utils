@@ -1,0 +1,78 @@
+SampleRate = 1
+# '${env_name}' is the name of the environment
+[${env_name}]
+  Sampler = "RulesBasedSampler"
+  # '${env_name}.rule' is how you specify an environment-wide rule
+  # This drops all healthchecks across an environment.
+  [[${env_name}.rule]]
+    name = "drop healthchecks"
+    drop = true
+    [[${env_name}.rule.condition]]
+      field = "http.route"
+      operator = "="
+      value = "/alive"
+
+  # This keeps all 500 errors across an environment.
+  [[${env_name}.rule]]
+    name = "keep 500 errors"
+    SampleRate = 1
+    [[${env_name}.rule.condition]]
+      field = "http.status_code"
+      operator = ">="
+      value = 500
+
+  [[${env_name}.rule]]
+    name = "keep all registrations"
+    SampleRate = 1
+    [[${env_name}.rule.condition]]
+      field = "http.route"
+      operator = "="
+      value = "/api/v0/user/register"
+
+  [[${env_name}.rule]]
+    name = "dynamically sample all logins"
+    [[${env_name}.rule.condition]]
+      field = "http.route"
+      operator = "="
+      value = "/api/v0/user/login"
+    [${env_name}.rule.sampler.EMADynamicSampler]
+      Sampler = "EMADynamicSampler"
+      AddSampleRateKeyToTrace = true
+      AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.logins"
+      FieldList = ["http.status_code", "readz.login.user_id"]
+      GoalSampleRate = 50
+    
+  # This dynamically samples all 200 responses across an environment.
+  [[${env_name}.rule]]
+    name = "dynamically sample stories created by users"
+    [[${env_name}.rule.condition]]
+      field = "status_code"
+      operator = "="
+      value = 201
+    [[${env_name}.rule.conditions]]
+      field = "http.route"
+      operator = "="
+      value = "/api/v0/write/<story_type>"
+    [${env_name}.rule.sampler.EMADynamicSampler]
+      Sampler = "EMADynamicSampler"
+      AddSampleRateKeyToTrace = true
+      AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.200s"
+      FieldList = ["http.target", "readz.post_story.user_id"]
+      GoalSampleRate = 15
+
+  # This dynamically samples all 200 responses across an environment.
+  [[${env_name}.rule]]
+    name = "dynamically sample 200 responses"
+    [[${env_name}.rule.condition]]
+      field = "status_code"
+      operator = "<="
+      value = 299
+    [${env_name}.rule.sampler.EMADynamicSampler]
+      Sampler = "EMADynamicSampler"
+      AddSampleRateKeyToTrace = true
+      AddSampleRateKeyToTraceField = "meta.refinery.dynsampler.200s"
+      FieldList = ["http.target"]
+      GoalSampleRate = 15
+
+  [[${env_name}.rule]]
+    SampleRate = 10 # default when no rules match, if missing defaults to 10
