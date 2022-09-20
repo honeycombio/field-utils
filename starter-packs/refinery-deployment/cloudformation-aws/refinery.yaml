@@ -108,13 +108,6 @@ Parameters:
     Type: String
     Default: 'refinery'
     Description: Supply a DNS record name that will be prepended to the Route 53 Hosted Zone
-  # LatestAmiId:
-  #   Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
-  #   Description: Pointer to the latest AL2022 AMI, do not change
-  #   Default: '/aws/service/ami-amazon-linux-latest/al2022-ami-kernel-5.15-arm64'
-  # TemplateVersion:
-  #   Type: String
-  #   Default: "0.1"
 
 Metadata:
   cfn-lint:
@@ -178,9 +171,11 @@ Mappings:
   # cfn-ami-to-mapping -n refinery-marketplace-image-builder-202209121514 -k arm64
   AMIRegionMap:
     us-east-1:
-      arm64: ami-068ecec9b7f6fe34f
+      arm64: ami-0e8dca0edfc91da9b
+    us-east-2:
+      arm64: ami-0116434bc170dfe45
     us-west-2:
-      arm64: ami-0d3ee0a514cdb51b5
+      arm64: ami-0f3e7222f03cff430
 
 Resources:
 # Security Groups
