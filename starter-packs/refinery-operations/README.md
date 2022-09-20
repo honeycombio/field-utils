@@ -21,3 +21,8 @@ terraform init
 terraform plan
 terraform apply
 ```
+
+### Video Walkthrough
+
+https://user-images.githubusercontent.com/3537368/191327560-f2d6d20a-0cd6-4b66-9400-f98aebd808c8.mp4
+
