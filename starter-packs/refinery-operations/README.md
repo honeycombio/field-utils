@@ -1,4 +1,4 @@
-# Refinery Starter Pack
+# Refinery Operations Starter Pack
 
 This is the Starter Pack for Refinery day 2 operations. It creates the boards, queries, triggers and SLOs that you'd need to operate Honeycomb Refinery.
 
