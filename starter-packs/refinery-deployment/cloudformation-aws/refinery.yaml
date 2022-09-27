@@ -436,6 +436,10 @@ Resources:
                 PeerBufferSize = 10000
                 AddHostMetadataToTrace = true
                 QueryAuthToken = "JolkienRolkienRolkienTolkien"
+                AdditionalErrorFields = [
+                  "trace.span_id",
+                  "service.name",
+                ]
                 AddRuleReasonToTrace = true
                 Collector = "InMemCollector"
                 Logger = "honeycomb"
@@ -496,7 +500,7 @@ Resources:
                 [Service]
                 Environment="HNY_API_KEY=${RefineryMetricsHoneycombAPIKey}"
                 Environment="HNY_DATASET=hostmetrics"
-                Environment="OTEL_RESOURCE_ATTRIBUTES='service.name=refinery,deployment.environment=${AWS::StackName}"
+                Environment="OTEL_RESOURCE_ATTRIBUTES=service.name=refinery,cloud.stackname=${AWS::StackName}"
                 ExecStart=/usr/local/bin/otelcol --config /etc/honeycomb-metrics-config.yaml
                 Restart=always
                 #
