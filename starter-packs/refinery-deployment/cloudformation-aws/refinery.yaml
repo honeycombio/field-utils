@@ -176,25 +176,25 @@ Mappings:
   # cfn-ami-to-mapping -n refinery-marketplace-image-builder-202210210339 -k arm64 | grep -v '{}'
   AMIRegionMap:
     ca-central-1:
-      arm64: ami-0e47c12b44dccad47
+      arm64: ami-03d188d6177c7956f
     eu-central-1:
-      arm64: ami-05595352937196ad4
+      arm64: ami-07e58aba27396c534
     eu-north-1:
-      arm64: ami-0332f94b46c3bbee2
+      arm64: ami-05bdbfa3a4a8280ef
     eu-west-1:
-      arm64: ami-0ef90cee238283fe8
+      arm64: ami-0629e27f359eb91f4
     eu-west-2:
-      arm64: ami-0d63928ba9cb1721f
+      arm64: ami-0b74d205a303e3b4b
     eu-west-3:
-      arm64: ami-008d3dc2e4aab3a4f
+      arm64: ami-0850b82efbce2674f
     us-east-1:
-      arm64: ami-09b7c52f29fcc4219
+      arm64: ami-08e60713c13c55a23
     us-east-2:
-      arm64: ami-0d5349ed9ded64fe5
+      arm64: ami-0002820536f288d33
     us-west-1:
-      arm64: ami-0652d4ccf34f76bfd
+      arm64: ami-0fef3af236327d81b
     us-west-2:
-      arm64: ami-0a0e12dec8bdfb19e
+      arm64: ami-07a0d1892970e2ebf
 
 Resources:
 # Security Groups
@@ -514,6 +514,7 @@ Resources:
           commands:
             03_otel_collector:
               command: |
+                systemctl enable otel-collector
                 systemctl start otel-collector
         crude:
           files:
@@ -530,6 +531,7 @@ Resources:
           commands:
             01_crude:
               command: |
+                systemctl enable crude
                 systemctl start crude
 
 # Redis Cluster

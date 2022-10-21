@@ -79,7 +79,8 @@ build {
   provisioner "shell" {
     environment_vars = [
       "REFINERY_RELEASE=1.18.0",
-      "OTEL_CONFIG_RELEASE=1.4.0"
+      "OTEL_CONFIG_RELEASE=1.4.0",
+      "CRUDE_RELEASE=0.1.4",
     ]
     scripts = [
       "install_refinery.sh",
