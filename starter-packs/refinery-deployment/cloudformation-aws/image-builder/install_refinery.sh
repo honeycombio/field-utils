@@ -57,3 +57,7 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 EOF
+
+# Install cron
+sudo yum install -y cronie
+sudo systemctl enable crond

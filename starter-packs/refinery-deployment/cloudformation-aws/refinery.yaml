@@ -173,28 +173,28 @@ Conditions:
 
 Mappings:
   # To generate:
-  # cfn-ami-to-mapping -n refinery-marketplace-image-builder-202210210202 -k arm64
+  # cfn-ami-to-mapping -n refinery-marketplace-image-builder-202210210339 -k arm64 | grep -v '{}'
   AMIRegionMap:
     ca-central-1:
-      arm64: ami-03e2df957ecf45882
+      arm64: ami-0e47c12b44dccad47
     eu-central-1:
-      arm64: ami-0be4bb1949f7a7c70
+      arm64: ami-05595352937196ad4
     eu-north-1:
-      arm64: ami-0342e55aefec7e475
+      arm64: ami-0332f94b46c3bbee2
     eu-west-1:
-      arm64: ami-036f6b6e756f35112
+      arm64: ami-0ef90cee238283fe8
     eu-west-2:
-      arm64: ami-05a7a9c8db91bae38
+      arm64: ami-0d63928ba9cb1721f
     eu-west-3:
-      arm64: ami-0be0960db3718b061
+      arm64: ami-008d3dc2e4aab3a4f
     us-east-1:
-      arm64: ami-03bad92ea3885643e
+      arm64: ami-09b7c52f29fcc4219
     us-east-2:
-      arm64: ami-00cbfd54552386314
+      arm64: ami-0d5349ed9ded64fe5
     us-west-1:
-      arm64: ami-0f3d89b7f10fbe1d2
+      arm64: ami-0652d4ccf34f76bfd
     us-west-2:
-      arm64: ami-05e8551821078df6e
+      arm64: ami-0a0e12dec8bdfb19e
 
 Resources:
 # Security Groups
@@ -524,6 +524,9 @@ Resources:
                 OTEL_SERVICE_NAME="crude"
                 AWS_REGION="${AWS::Region}"
                 S3_BUCKET="${ConfigBucket}"
+            /etc/cron.d/rules_fetch:
+              content: !Sub |
+                * * * * * root aws s3 cp s3://${ConfigBucket}/rules.txt /etc/refinery/rules.toml
           commands:
             01_crude:
               command: |
