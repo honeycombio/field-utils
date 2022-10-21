@@ -40,7 +40,7 @@ EOF
 
 # Install crude
 cd /tmp
-curl -L -o - https://github.com/irvingpop/crude/releases/download/v0.1.2/crude_0.1.2_Linux_arm64.tar.gz | tar -xvzf - bin/crude
+curl -L -o - https://github.com/irvingpop/crude/releases/download/v0.1.3/crude_0.1.3_linux_arm64.tar.gz | tar -xvzf - bin/crude
 sudo mv bin/crude /usr/local/bin/crude
 
 # Systemd unit file for crude
