@@ -172,29 +172,29 @@ Conditions:
     !Not [!Equals [!Ref RedisNumReplicas, 0]]
 
 Mappings:
-  # To generate:
-  # cfn-ami-to-mapping -n refinery-marketplace-image-builder-202210210339 -k arm64 | grep -v '{}'
+  # To generate, run:
+  # image-builder/generate-mappings.sh
   AMIRegionMap:
-    ca-central-1:
-      arm64: ami-03d188d6177c7956f
-    eu-central-1:
-      arm64: ami-07e58aba27396c534
     eu-north-1:
-      arm64: ami-05bdbfa3a4a8280ef
-    eu-west-1:
-      arm64: ami-0629e27f359eb91f4
-    eu-west-2:
-      arm64: ami-0b74d205a303e3b4b
+      arm64: ami-027625eb523766869
     eu-west-3:
-      arm64: ami-0850b82efbce2674f
+      arm64: ami-05387e63442d5fd77
+    eu-west-2:
+      arm64: ami-03f3f0bce85ac61be
+    eu-west-1:
+      arm64: ami-0284479b6693937da
+    ca-central-1:
+      arm64: ami-07d472e42b4921fbc
+    eu-central-1:
+      arm64: ami-0180d47ec1e8fc92c
     us-east-1:
-      arm64: ami-08e60713c13c55a23
+      arm64: ami-002b972e11bfb1e22
     us-east-2:
-      arm64: ami-0002820536f288d33
+      arm64: ami-05cd7df3264e3c907
     us-west-1:
-      arm64: ami-0fef3af236327d81b
+      arm64: ami-02675aaf0be4423aa
     us-west-2:
-      arm64: ami-07a0d1892970e2ebf
+      arm64: ami-0ae090ae228aa781b
 
 Resources:
 # Security Groups
@@ -527,7 +527,7 @@ Resources:
                 S3_BUCKET="${ConfigBucket}"
             /etc/cron.d/rules_fetch:
               content: !Sub |
-                * * * * * root aws s3 cp s3://${ConfigBucket}/rules.txt /etc/refinery/rules.toml
+                * * * * * root aws s3 cp s3://${ConfigBucket}/rules.toml /etc/refinery/rules.toml
           commands:
             01_crude:
               command: |
@@ -741,6 +741,16 @@ Outputs:
     Value: !If [CreateRoute53Record, !Sub "${Route53RecordName}.${Route53HostedZone}", !GetAtt RefineryALB.DNSName]
     Export:
       Name: !Sub "${AWS::StackName}-DNSName"
+  RefineryURL:
+    Description: The DNS name of the load balancer
+    Value: !If [CreateRoute53Record, !Sub "https://${Route53RecordName}.${Route53HostedZone}", !GetAtt RefineryALB.DNSName]
+    Export:
+      Name: !Sub "${AWS::StackName}-RefineryURL"
+  AdminURL:
+    Description: The URL for the Admin web interface (only available to the Admin Security Group)
+    Value: !If [CreateRoute53Record, !Sub "https://${Route53AdminRecordName}.${Route53HostedZone}", !GetAtt RefineryALB.DNSName]
+    Export:
+      Name: !Sub "${AWS::StackName}-RefineryAdminURL"
   StackName:
     Description: The name of this stack, as an export
     Value: !Ref AWS::StackName
