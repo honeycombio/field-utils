@@ -47,13 +47,13 @@ Parameters:
       r6g.medium, r6g.large, r6g.xlarge, r6g.2xlarge, r6g.4xlarge, r6g.8xlarge, r6g.12xlarge,
       t4g.small, t4g.medium, t4g.large, t4g.xlarge, t4g.2xlarge]
   MaxRefineryInstances:
-    Description: The maximum number of Refinery instances to launch
+    Description: The maximum number of Refinery instances to launch. By default these will be launched as Spot (deeply discounted) instances.
     Type: Number
     Default: 3
-  MinRefineryInstances:
-    Description: The minimum number of Refinery instances to launch
+  NumRefineryOnDemandInstances:
+    Description: The number of On-Demand (non-spot/full-price) Refinery instances to launch. The rest up to MaxRefineryInstances will be spot instances. 0 to disable on-demand instances. Must be less than MaxRefineryInstances.
     Type: Number
-    Default: 1
+    Default: 0
   RedisInstanceType:
     Description: EC2 Instance type for Elasticache (Low performance, t4g instance class recommended)
     Default: cache.t4g.small
@@ -138,7 +138,7 @@ Metadata:
         Parameters:
           - InstanceType
           - MaxRefineryInstances
-          - MinRefineryInstances
+          - NumRefineryOnDemandInstances
           - RedisInstanceType
           - RedisNumReplicas
       - Label:
@@ -227,6 +227,7 @@ Resources:
         Value: !Sub ${AWS::StackName}-Refinery-SG
       VpcId: !Ref VPC
 
+
   RefinerySecurityGroupPeerTraffic:
     Type: AWS::EC2::SecurityGroupIngress
     Condition: CreateRefinerySecurityGroup
@@ -276,7 +277,8 @@ Resources:
     Properties:
       MixedInstancesPolicy:
         InstancesDistribution:
-          OnDemandBaseCapacity: 0
+          OnDemandAllocationStrategy: lowest-price
+          OnDemandBaseCapacity: !Ref NumRefineryOnDemandInstances
           OnDemandPercentageAboveBaseCapacity: 0
           SpotAllocationStrategy: capacity-optimized
         LaunchTemplate:
@@ -310,7 +312,11 @@ Resources:
         Value: !Ref ContactEmail
         PropagateAtLaunch: true
       VPCZoneIdentifier: !Ref RefineryServerSubnets
-
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MinInstancesInService: 1
+        MaxBatchSize: 2
+        PauseTime: PT1M
 
   FrontendAutoScaleUpPolicy:
     Type: AWS::AutoScaling::ScalingPolicy

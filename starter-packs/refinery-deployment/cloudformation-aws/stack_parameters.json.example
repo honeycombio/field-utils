@@ -8,7 +8,7 @@
     "ParameterValue": "subnet-0f0eab0f7fc909926,subnet-03e4cf727f1fc133e,subnet-0dc7f0a33be3e7c46,subnet-08e43d740470ccac9"
   },
   {
-    "ParameterKey": "InboundAdminSecurityGroupId",
+    "ParameterKey": "AdminSecurityGroupId",
     "ParameterValue": "sg-069e5e9f5613c2947"
   },
   {
@@ -28,6 +28,14 @@
     "ParameterValue": "SuperSecurePassword"
   },
   {
+    "ParameterKey": "RedisInstanceType",
+    "ParameterValue": "cache.t4g.small"
+  },
+  {
+    "ParameterKey": "RedisNumReplicas",
+    "ParameterValue": "1"
+  },
+  {
     "ParameterKey": "RefineryMetricsHoneycombAPIKey",
     "ParameterValue": "MyHoneycombAPIKey"
   },
@@ -44,8 +52,16 @@
     "ParameterValue": "3"
   },
   {
+    "ParameterKey": "NumRefineryOnDemandInstances",
+    "ParameterValue": "3"
+  },
+  {
     "ParameterKey": "Route53RecordName",
     "ParameterValue": "refinery"
+  },
+  {
+    "ParameterKey": "Route53AdminRecordName",
+    "ParameterValue": "refinery-admin"
   },
   {
     "ParameterKey": "Route53HostedZone",
