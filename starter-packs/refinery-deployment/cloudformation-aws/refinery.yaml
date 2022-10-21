@@ -108,13 +108,6 @@ Parameters:
     Type: String
     Default: 'refinery'
     Description: Supply a DNS record name that will be prepended to the Route 53 Hosted Zone
-  # LatestAmiId:
-  #   Type: 'AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>'
-  #   Description: Pointer to the latest AL2022 AMI, do not change
-  #   Default: '/aws/service/ami-amazon-linux-latest/al2022-ami-kernel-5.15-arm64'
-  # TemplateVersion:
-  #   Type: String
-  #   Default: "0.1"
 
 Metadata:
   cfn-lint:
@@ -177,10 +170,26 @@ Mappings:
   # To generate:
   # cfn-ami-to-mapping -n refinery-marketplace-image-builder-202209121514 -k arm64
   AMIRegionMap:
+    ca-central-1:
+      arm64: ami-0ad0cae5df8864863
+    eu-central-1:
+      arm64: ami-02189d2e791f60ea5
+    eu-north-1:
+      arm64: ami-00bba1b1f5d54c7f2
+    eu-west-1:
+      arm64: ami-0bf3e697bcff93586
+    eu-west-2:
+      arm64: ami-007b2139602abf961
+    eu-west-3:
+      arm64: ami-064e8ed50e2c04b20
     us-east-1:
-      arm64: ami-068ecec9b7f6fe34f
+      arm64: ami-02d4da8a6b47f8be5
+    us-east-2:
+      arm64: ami-0b8cf518471c8f0d8
+    us-west-1:
+      arm64: ami-0836fa7095748d5fe
     us-west-2:
-      arm64: ami-0d3ee0a514cdb51b5
+      arm64: ami-0ce00513d275ed1b8
 
 Resources:
 # Security Groups
@@ -309,6 +318,14 @@ Resources:
       Cooldown: '60'
       ScalingAdjustment: -1
 
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+      - !Ref RefineryRole
+
+
   RefineryALB:
     Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
     Properties:
@@ -396,6 +413,8 @@ Resources:
       LaunchTemplateData:
         ImageId: !FindInMap [AMIRegionMap, !Ref "AWS::Region", arm64]
         InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Name: !Ref InstanceProfile
         NetworkInterfaces:
         - DeviceIndex: 0
           AssociatePublicIpAddress: !Ref RefineryServerAssociatePublicIpAddress
@@ -412,105 +431,40 @@ Resources:
     Metadata:
       AWS::CloudFormation::Init:
         configSets:
-          default: [refinery_config, monitoring]
-        # RPM Installation is done in the Marketplace image, because AWS bans marketplace AMIs from downloading things
-        # install_refinery:
-        #   commands:
-        #     01_install:
-        #       command: |
-        #         curl -L -o /tmp/refinery.rpm https://github.com/honeycombio/refinery/releases/download/v1.15.0/refinery-1.15.0-1.aarch64.rpm
-        #         rpm -ivh /tmp/refinery.rpm
-        refinery_config:
-          files:
-            /etc/refinery/refinery.toml:
-              content: !Sub |
-                ListenAddr = "0.0.0.0:8080"
-                GRPCListenAddr = "0.0.0.0:9090"
-                PeerListenAddr = "0.0.0.0:8081"
-                CompressPeerCommunication = true
-                APIKeys = [
-                  "*",                   # wildcard accept all keys
-                  ]
-                HoneycombAPI = "https://api.honeycomb.io"
-                SendDelay = "2s"
-                TraceTimeout = "60s"
-                MaxBatchSize = 500
-                SendTicker = "100ms"
-                LoggingLevel = "info"
-                UpstreamBufferSize = 10000
-                PeerBufferSize = 10000
-                AddHostMetadataToTrace = true
-                QueryAuthToken = "JolkienRolkienRolkienTolkien"
-                AddRuleReasonToTrace = true
-                Collector = "InMemCollector"
-                Logger = "honeycomb"
-                Metrics = "honeycomb"
-
-                [PeerManagement]
-                Type = "redis"
-                RedisHost = "${ReplicationGroup.PrimaryEndPoint.Address}:${ReplicationGroup.PrimaryEndPoint.Port}"
-                RedisPassword = "${RedisPassword}"
-                UseTLS = true
-
-                # based on 4gb ram
-                [InMemCollector]
-                CacheCapacity = 343597
-                MaxAlloc = 3435973836
-
-                [HoneycombLogger]
-                LoggerHoneycombAPI = "https://api.honeycomb.io"
-                LoggerAPIKey = "${RefineryMetricsHoneycombAPIKey}"
-                LoggerDataset = "Refinery Logs"
-                LoggerSamplerEnabled = true
-                LoggerSamplerThroughput = 10
-
-                [HoneycombMetrics]
-                MetricsHoneycombAPI = "https://api.honeycomb.io"
-                MetricsAPIKey = "${RefineryMetricsHoneycombAPIKey}"
-                MetricsDataset = "Refinery Metrics"
-                MetricsReportingInterval = 60
-            /etc/refinery/rules.toml:
-              content: |
-                DryRun = false
-                SampleRate = 1
-
-                [Irving]
-                  Sampler = "EMADynamicSampler"
-                  GoalSampleRate = 10
-                  FieldList = ["status_code","request.path","response.status_code"]
-                  UseTraceLength = false
-                  AddSampleRateKeyToTrace = true
-                  AddSampleRateKeyToTraceField = "meta.refinery.dynsampler_key"
-                  AdjustmentInterval = 60
-                  MaxKeys = 10000
-                  Weight = 0.5
-
+          default: [refinery, monitoring, crude]
+        refinery:
           commands:
-            02_start:
-              command: |
-                /usr/bin/systemctl enable refinery
-                /usr/bin/systemctl start refinery
+            01_start_refinery:
+              command: !Sub |
+                export REDIS_HOST="${ReplicationGroup.PrimaryEndPoint.Address}"
+                export REDIS_PORT="${ReplicationGroup.PrimaryEndPoint.Port}"
+                export REDIS_PASSWORD="${RedisPassword}"
+                export HONEYCOMB_API_KEY="${RefineryMetricsHoneycombAPIKey}"
+
+                /usr/local/bin/configure-refinery.sh
         monitoring:
           files:
-            /etc/systemd/system/otel-collector.service:
+            /etc/otel-collector.env:
               content: !Sub |
-                [Unit]
-                Description=otel-collector
-                After=network.target
-                #
-                [Service]
-                Environment="HNY_API_KEY=${RefineryMetricsHoneycombAPIKey}"
-                Environment="HNY_DATASET=hostmetrics"
-                Environment="OTEL_RESOURCE_ATTRIBUTES='service.name=refinery,deployment.environment=${AWS::StackName}"
-                ExecStart=/usr/local/bin/otelcol --config /etc/honeycomb-metrics-config.yaml
-                Restart=always
-                #
-                [Install]
-                WantedBy=multi-user.target
+                HNY_API_KEY="${RefineryMetricsHoneycombAPIKey}"
+                HNY_DATASET="hostmetrics"
+                OTEL_RESOURCE_ATTRIBUTES="service.name=refinery,deployment.environment=${AWS::StackName}"
           commands:
             03_otel_collector:
               command: |
-                systemctl daemon-reload && systemctl start otel-collector
+                systemctl start otel-collector
+        crude:
+          files:
+            /etc/crude.env:
+              content: !Sub |
+                GIN_MODE=release
+                HONEYCOMB_API_KEY="${RefineryMetricsHoneycombAPIKey}"
+                OTEL_SERVICE_NAME="crude"
+                S3_BUCKET="${ConfigBucket}"
+          commands:
+            01_crude:
+              command: |
+                systemctl start crude
 
 # Redis Cluster
 #########################################################################################
@@ -651,6 +605,55 @@ Resources:
       Dimensions:
         - Name: AutoScalingGroupName
           Value: !Ref RefineryAutoScaleGroup
+
+# Configuration Bucket and Access Rules
+################################################################################
+
+  ConfigBucket:
+    Type: AWS::S3::Bucket
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Properties:
+      AccessControl: Private
+      VersioningConfiguration:
+        Status: Enabled
+
+  RefineryRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Action:
+          - sts:AssumeRole
+          Effect: Allow
+          Principal:
+            Service:
+            - ec2.amazonaws.com
+        Version: '2012-10-17'
+      Path: /
+
+  RolePolicies:
+    Type: AWS::IAM::Policy
+    Properties:
+      PolicyName: !Sub ${AWS::StackName}-Policy
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        # Allow all actions to one bucket
+        - Action: s3:*
+          Effect: Allow
+          Resource:
+            - !Join ['', [ 'arn:aws:s3:::', !Ref ConfigBucket]]
+            - !Join ['', [ 'arn:aws:s3:::', !Ref ConfigBucket, '/*' ]]
+        # Allow ability to list all buckets
+        - Action: s3:List*
+          Effect: Allow
+          Resource: arn:aws:s3:::*
+      Roles:
+      - !Ref RefineryRole
+
+# Outputs
+################################################################################
 
 Outputs:
   DNSName:
