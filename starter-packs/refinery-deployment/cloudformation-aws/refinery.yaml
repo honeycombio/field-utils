@@ -108,6 +108,10 @@ Parameters:
     Type: String
     Default: 'refinery'
     Description: Supply a DNS record name that will be prepended to the Route 53 Hosted Zone
+  Route53AdminRecordName:
+    Type: String
+    Default: 'refinery-admin'
+    Description: Supply a DNS record name for the admin interface that will be prepended to the Route 53 Hosted Zone
 
 Metadata:
   cfn-lint:
@@ -151,6 +155,7 @@ Metadata:
         Parameters:
           - Route53HostedZone
           - Route53RecordName
+          - Route53AdminRecordName
 
 Conditions:
   CreateRoute53Record:
@@ -213,6 +218,10 @@ Resources:
         IpProtocol: tcp
         SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
         ToPort: 9090
+      - FromPort: 8000
+        IpProtocol: tcp
+        SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
+        ToPort: 8000
       Tags:
       - Key: Name
         Value: !Sub ${AWS::StackName}-Refinery-SG
@@ -277,6 +286,7 @@ Resources:
       TargetGroupARNs:
       - !Ref RefineryTargetGroup
       - !Ref RefineryGrpcTargetGroup
+      - !Ref RefineryAdminTargetGroup
       MaxSize: !Sub '${MaxRefineryInstances}'
       MinSize: !Sub '${MaxRefineryInstances}'
       DesiredCapacity: !Sub '${MaxRefineryInstances}'
@@ -406,6 +416,58 @@ Resources:
           - Key: X-Contact
             Value: !Ref ContactEmail
 
+  RefineryAdminALB:
+    Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
+    Properties:
+      SecurityGroups:
+        - !Ref AdminSecurityGroupId
+      Subnets: !If [UseServerSubnetsForLoadBalancers, !Ref RefineryServerSubnets, !Ref LoadBalancerSubnets ]
+      # IpAddressType: dualstack
+      Scheme: !Ref LoadBalancerScheme
+      Tags:
+        - Key: Name
+          Value: !Sub refineryAdmin-${AWS::StackName}
+        - Key: StackName
+          Value: !Sub ${AWS::StackName}
+        - Key: X-Dept
+          Value: !Ref ContactDept
+        - Key: X-Contact
+          Value: !Ref ContactEmail
+
+  RefineryAdminALBListener:
+    Type: "AWS::ElasticLoadBalancingV2::Listener"
+    Properties:
+        Certificates:
+          - CertificateArn: !Ref SSLCertificateARN
+        LoadBalancerArn: !Ref RefineryAdminALB
+        Port: 443
+        Protocol: HTTPS
+        SslPolicy: ELBSecurityPolicy-TLS-1-2-2017-01
+        DefaultActions:
+        - Type: forward
+          TargetGroupArn: !Ref RefineryAdminTargetGroup
+
+  RefineryAdminTargetGroup:
+      Type: "AWS::ElasticLoadBalancingV2::TargetGroup"
+      Properties:
+        HealthCheckIntervalSeconds: 10
+        UnhealthyThresholdCount: 3
+        HealthyThresholdCount: 2
+        HealthCheckPath: /
+        VpcId: !Ref VPC
+        Port: 8000
+        Protocol: HTTP
+        TargetGroupAttributes:
+          - Key: stickiness.enabled
+            Value: 'true'
+          - Key: stickiness.type
+            Value: lb_cookie
+        Tags:
+          - Key: X-Dept
+            Value: !Ref ContactDept
+          - Key: X-Contact
+            Value: !Ref ContactEmail
+
   RefineryLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
     Properties:
@@ -460,6 +522,7 @@ Resources:
                 GIN_MODE=release
                 HONEYCOMB_API_KEY="${RefineryMetricsHoneycombAPIKey}"
                 OTEL_SERVICE_NAME="crude"
+                AWS_REGION="${AWS::Region}"
                 S3_BUCKET="${ConfigBucket}"
           commands:
             01_crude:
@@ -533,6 +596,18 @@ Resources:
       TTL: 900
       ResourceRecords:
       - !GetAtt RefineryALB.DNSName
+
+  RefineryAdminLBDNSRecord:
+    Type: AWS::Route53::RecordSet
+    Condition: CreateRoute53Record
+    Properties:
+      HostedZoneName: !Sub ${Route53HostedZone}.
+      Name: !Sub ${Route53AdminRecordName}.${Route53HostedZone}.
+      Comment: !Sub Created by Cloudformation ${AWS::StackName}
+      Type: CNAME
+      TTL: 900
+      ResourceRecords:
+      - !GetAtt RefineryAdminALB.DNSName
 
 # Monitoring
 #########################################################################################
