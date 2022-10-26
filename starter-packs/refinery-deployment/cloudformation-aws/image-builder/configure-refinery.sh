@@ -35,6 +35,7 @@ PeerBufferSize = 10000
 AddHostMetadataToTrace = true
 QueryAuthToken = "JolkienRolkienRolkienTolkien"
 AddRuleReasonToTrace = true
+AddSpanCountToRoot = true
 Collector = "InMemCollector"
 Logger = "honeycomb"
 Metrics = "honeycomb"

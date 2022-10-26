@@ -176,25 +176,25 @@ Mappings:
   # image-builder/generate-mappings.sh
   AMIRegionMap:
     eu-north-1:
-      arm64: ami-027625eb523766869
+      arm64: ami-098b0e8281d2f5cf4
     eu-west-3:
-      arm64: ami-05387e63442d5fd77
+      arm64: ami-018a82651ff228bc0
     eu-west-2:
-      arm64: ami-03f3f0bce85ac61be
+      arm64: ami-05e23fbc43e7b5606
     eu-west-1:
-      arm64: ami-0284479b6693937da
+      arm64: ami-052ec3580e0563ca2
     ca-central-1:
-      arm64: ami-07d472e42b4921fbc
+      arm64: ami-0aae5b77f20f22f2c
     eu-central-1:
-      arm64: ami-0180d47ec1e8fc92c
+      arm64: ami-08800f80a6504100d
     us-east-1:
-      arm64: ami-002b972e11bfb1e22
+      arm64: ami-0fc33a34f39d9aa6e
     us-east-2:
-      arm64: ami-05cd7df3264e3c907
+      arm64: ami-0b493a5ccf25cc7aa
     us-west-1:
-      arm64: ami-02675aaf0be4423aa
+      arm64: ami-045ecb55cca11ecff
     us-west-2:
-      arm64: ami-0ae090ae228aa781b
+      arm64: ami-0a37f8acab9eac200
 
 Resources:
 # Security Groups

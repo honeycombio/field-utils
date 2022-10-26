@@ -1,4 +1,5 @@
 #!/bin/bash
+set -e -o pipefail
 
 IMAGE_NAME='refinery-marketplace-image-builder-*'
 IMAGE_OWNERID="939023695662"
