@@ -36,6 +36,7 @@ AddHostMetadataToTrace = true
 QueryAuthToken = "JolkienRolkienRolkienTolkien"
 AddRuleReasonToTrace = true
 AddSpanCountToRoot = true
+CacheOverrunStrategy = "impact"
 Collector = "InMemCollector"
 Logger = "honeycomb"
 Metrics = "honeycomb"
