@@ -1,19 +1,20 @@
 #!/usr/bin/env python3
 
-# usage: hny-column-cleanup.py [-h] -k API_KEY -d DATASET [-m {hidden,spammy}]
+# usage: hny-column-cleanup.py [-h] -k API_KEY -d DATASET [-m {hidden,spammy,date}] --date YYYY-MM-DD
 # Honeycomb Dataset Column Cleanup tool
 # arguments:
-#   -h, --help            show this help message and exit
-#   -k API_KEY, --api-key API_KEY
-#                         Honeycomb API key
-#   -d DATASET, --dataset DATASET
-#                         Honeycomb Dataset
-#   -m {hidden,spammy}, --mode {hidden,spammy}
-#                         Type of columns to clean up
-#   --dry-run             Will print out the columns it would delete without deleting them
+#   -h, --help              show this help message and exit
+#   -k API_KEY, --api-key   API_KEY
+#                           Honeycomb API key
+#   -d DATASET, --dataset   DATASET
+#                           Honeycomb Dataset
+#   -m {hidden,spammy,date} --mode {hidden,spammy,date}
+#                           Type of columns to clean up. `date` targets the `created_at` date.
+#   --date YYYY/MM/DD       ISO8601 date to be used with --mode date
+#   --dry-run               Will print out the columns it would delete without deleting them
 #
 # Prerequisites:
-#   - Python 3.6+
+#   - Python 3.11+
 #   - Requests module
 #   - A Honeycomb API key with the "Manage Queries and Columns" permission
 
@@ -22,11 +23,14 @@ import requests
 import sys
 import signal
 import time
+from datetime import date
+from datetime import datetime
 
 HONEYCOMB_API = 'https://api.honeycomb.io/1/'  # /columns/dataset_slug
-SPAMMY_STRINGS = ['burp', 'xml', '%',
-                  '{', '(', '*', '!', '<', '..', '|', '&', '"', '\'', '\r', '\n']
-
+SPAMMY_STRINGS = [
+                 'oastify', 'burp', 'xml', 'jndi', 'ldap', # pentester                 
+		         '%','{', '(', '*', '!', '?', '<', '..', '|', '&', '"', '\'', '\r', '\n','`','--','u0','\\','@'
+]
 
 def fetch_all_columns(dataset, api_key):
     """
@@ -65,6 +69,17 @@ def list_spammy_columns(dataset, api_key):
                 break  # end the inner loop in case there's multiple matches in the same string
     return spammy_column_ids
 
+def list_columns_by_date(dataset, api_key, date):
+     """
+     List columns by date in a dataset and return the list as an array of column IDs. The created date is set in `column_created_date_string` for now.
+     """
+     all_columns = fetch_all_columns(dataset, api_key)
+     matched_column_ids = {}
+     for column in all_columns:
+         created_at_date = datetime.fromisoformat(column['created_at']).date()
+         if date == created_at_date:            
+            matched_column_ids[column['id']] = column['key_name']            
+     return matched_column_ids
 
 def delete_columns(dataset, api_key, is_dry_run, column_ids):
     """
@@ -102,9 +117,11 @@ if __name__ == "__main__":
         parser.add_argument('-d', '--dataset',
                             help='Honeycomb Dataset', required=True)
         parser.add_argument('-m', '--mode', default='hidden',
-                            choices=['hidden', 'spammy'], help='Type of columns to clean up')
+                            choices=['hidden', 'spammy', 'date'], help='Type of columns to clean up')
         parser.add_argument('--dry-run', default=False,
                             action=argparse.BooleanOptionalAction, help='Will print out the columns it would delete without deleting them')
+        parser.add_argument('--date', type=date.fromisoformat, default=None,
+                            help='Search for columns to clean up created on date (YYYY-MM-DD)')
         args = parser.parse_args()
 
         columns_to_delete = {}
@@ -113,6 +130,10 @@ if __name__ == "__main__":
             columns_to_delete = list_hidden_columns(args.dataset, args.api_key)
         elif args.mode == 'spammy':
             columns_to_delete = list_spammy_columns(args.dataset, args.api_key)
+        elif (args.mode == 'date' and args.date is not None):
+            columns_to_delete = list_columns_by_date(args.dataset, args.api_key, args.date)
+        else:            
+            parser.error('--date YYYY-MM-DD is required when using --mode date')
 
         if len(columns_to_delete.keys()) > 0:
             delete_columns(args.dataset, args.api_key,
