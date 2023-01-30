@@ -24,8 +24,10 @@ import signal
 import time
 
 HONEYCOMB_API = 'https://api.honeycomb.io/1/'  # /columns/dataset_slug
-SPAMMY_STRINGS = ['burp', 'xml', '%',
-                  '{', '(', '*', '!', '<', '..', '|', '&', '"', '\'', '\r', '\n']
+SPAMMY_STRINGS = [
+                 'oastify', 'burp', 'xml', 'jndi', 'ldap', # pentester                 
+		         '%','{', '(', '*', '!', '?', '<', '..', '|', '&', '"', '\'', '\r', '\n','`','--','u0','\\','@'
+]
 
 
 def fetch_all_columns(dataset, api_key):
