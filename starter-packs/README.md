@@ -1,5 +1,5 @@
-| :exclamation:  This is very important   | Starter packs have moved: https://registry.terraform.io/namespaces/honeycombio |
-|-----------------------------------------|--------------------------------------------------------------------------------|
+| :exclamation:  Starter packs have moved | You can now find them here: https://registry.terraform.io/namespaces/honeycombio |
+|-----------------------------------------|----------------------------------------------------------------------------------|
 
 
 
