@@ -1,6 +1,5 @@
-| :exclamation:  Starter packs have moved | You can now find them here: https://registry.terraform.io/namespaces/honeycombio |
-|-----------------------------------------|----------------------------------------------------------------------------------|
-
+| :exclamation: Terraform module-based starter packs have moved | You can now find them here: https://registry.terraform.io/namespaces/honeycombio |
+|---------------------------------------------------------------|----------------------------------------------------------------------------------|
 
 
 # Honeycomb Starter Packs
