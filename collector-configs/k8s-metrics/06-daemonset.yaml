@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: opentelemetry-collector
+  namespace: kstats
+  labels:
+    app: opentelemetry-collector
+spec:
+  selector:
+    matchLabels:
+      app: opentelemetry-collector
+  template:
+    metadata:
+      labels:
+        app: opentelemetry-collector
+    spec:
+      tolerations:
+        - effect: NoSchedule
+          key: node.alpha.kubernetes.io/role
+          operator: Exists
+        - effect: NoSchedule
+          key: node-role.kubernetes.io/master
+          operator: Exists
+      serviceAccountName: kstats-opentelemetry-collector
+      containers:
+        - name: opentelemetry-collector
+          securityContext:
+            {}
+          image: "otel/opentelemetry-collector-contrib:0.53.0"
+          imagePullPolicy: IfNotPresent
+          args:
+            - "--config=/conf/opentelemetry-collector-config.yaml"
+          env:
+            - name: K8S_NODE_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.nodeName
+          volumeMounts:
+            - name: opentelemetry-collector-config
+              mountPath: /conf
+      volumes:
+        - name: opentelemetry-collector-config
+          configMap:
+            name: opentelemetry-collector
+            items:
+              - key: opentelemetry-collector-config
+                path: opentelemetry-collector-config.yaml
+

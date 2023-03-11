@@ -1,0 +1,81 @@
+receivers:
+  otlp:
+
+processors:
+  k8sattributes:
+    passthrough: false
+    auth_type: "kubeConfig"
+    extract:
+        metadata:
+            # extract the following well-known metadata fields
+            - podName
+            - podUID
+            - deployment
+            - cluster
+            - namespace
+            - node
+            - startTime
+
+  attributes:
+    actions:
+      - key: environment
+        value: Dev
+        action: insert
+
+  metricstransform:
+    transforms:
+      - include: \.
+        match_type: regexp
+        action: update
+        operations:
+          - new_label: environment
+            new_value: Metrics
+            action: add_label
+
+  batch:
+
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 75
+    spike_limit_percentage: 25    
+
+exporters:
+  logging:
+    logLevel: debug
+  # No longer need to set dataset for trace data unless using Honeycomb Classic
+  otlp/traces:
+    endpoint: api.honeycomb.io:443
+    headers:
+      x-honeycomb-team: PutYourKeyHere
+      x-honeycomb-dataset: Dev
+
+  otlp/metrics:
+    endpoint: api.honeycomb.io:443
+    headers:
+      x-honeycomb-team: PutYourKeyHere
+      x-honeycomb-dataset: Metrics
+
+  awskinesis:
+    max_records_per_batch: 10
+    max_record_size: 1000
+    aws:
+        stream_name: test-stream
+        region: mars-1
+        role: arn:test-role
+        kinesis_endpoint: awskinesis.mars-1.aws.galactic
+    retry_on_failure:
+      enabled: false
+    encoding:
+      name: otlp-proto
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, k8sattributes, batch]
+      exporters: [otlp/traces, awskinesis]
+    
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, metricstransform, batch]
+      exporters: [logging, otlp/metrics]

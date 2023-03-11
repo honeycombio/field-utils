@@ -1,0 +1,119 @@
+extensions:
+  memory_ballast:
+    size_mib: 3024
+  zpages:
+    endpoint: 0.0.0.0:55679
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: "0.0.0.0:4317"
+      http:
+        endpoint: "0.0.0.0:4318"
+        cors_allowed_origins:
+        - http://localhost:8090
+
+processors:
+  k8sattributes:
+    passthrough: false
+    auth_type: "kubeConfig"
+    extract:
+        metadata:
+            # extract the following well-known metadata fields
+            - podName
+            - podUID
+            - deployment
+            - cluster
+            - namespace
+            - node
+            - startTime
+
+  attributes:
+    actions:
+      - key: environment
+        value: POCAlign
+        action: insert
+
+  metricstransform:
+    transforms:
+      - include: \.
+        match_type: regexp
+        action: update
+        operations:
+          - new_label: environment
+            new_value: POCAlign
+            action: add_label
+
+  batch:
+
+  memory_limiter:
+    check_interval: 1s
+    limit_percentage: 50
+    spike_limit_percentage: 30
+
+exporters:
+  logging:
+    logLevel: debug
+  # no longer need to set dataset for traces unless using Honeycomb Classic
+  otlp/honeycombtraces:
+    endpoint: api.honeycomb.io:443
+    headers:
+      x-honeycomb-team: YourAPIKeyHere
+      x-honeycomb-dataset: YouApplicationDataSetHere
+
+  otlp/newrelic:
+    endpoint: otlp.nr-data.net:4317
+    headers:
+      api-key: <<YourTokenHere>>
+
+  otlp/lightstep:
+    endpoint: ingest.lightstep.com:443
+    headers:
+      {"lightstep-access-token": "YourTokenHere"}
+
+  otlp/honeycombmetrics:
+    endpoint: api.honeycomb.io:443
+    headers:
+      x-honeycomb-team: YourAPIKeyHere
+      x-honeycomb-dataset: YourMetricDataSetHere
+
+  otlp/sapm:
+    access_token: YourTokenHere
+    access_token_passthrough: true
+    endpoint: https://ingest.us0.otlp/signalfx.com/v2/trace
+    max_connections: 100
+    num_workers: 8
+
+  otlp/signalfx:
+    access_token: YourTokenHere
+    realm: us0
+    correlation:
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, k8sattributes, batch]
+      exporters: [otlp/honeycombtraces]
+
+    traces/2:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/newrelic]
+
+    traces/3:
+      receivers: [otlp]
+      processors: [memory_limiter, attributes, batch]
+      exporters: [otlp/sapm, otlp/signalfx]
+
+    traces/4:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [otlp/lightstep] 
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, metricstransform, batch]
+      exporters: [logging, otlp/signalfx, otlp/honeycombmetrics, otlp/newrelic, otlp/lightstep]
+  extensions: [memory_ballast, zpages]

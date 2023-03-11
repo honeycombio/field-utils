@@ -1,0 +1,128 @@
+receivers:
+      otlp/traces:
+        protocols:
+          grpc: {}
+      prometheus/app-metrics:
+        config:
+          scrape_configs:
+            - job_name: app-metrics
+              kubernetes_sd_configs:
+                - role: pod
+              tls_config:
+                ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_namespace]
+                  action: keep
+                  regex: "apps"
+                - source_labels: [__meta_kubernetes_pod_container_port_number]
+                  action: keep
+                  regex: "9090"
+      prometheus/container-metrics:
+        config:
+          scrape_configs:
+            - job_name: container-metrics
+              kubernetes_sd_configs:
+                - role: pod
+              tls_config:
+                ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+              bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+              relabel_configs:
+                - source_labels: [__meta_kubernetes_namespace]
+                  action: keep
+                  regex: "infra"
+                - source_labels: [__meta_kubernetes_pod_label_app]
+                  action: keep
+                  regex: "cadvisor"
+      prometheus/confluent-metrics:
+        config:
+          scrape_configs:
+            - job_name: confluent-metrics
+              scrape_interval: 1m
+              scrape_timeout: 1m
+              honor_timestamps: true
+              static_configs:
+                - targets:
+                  - api.telemetry.confluent.cloud
+              scheme: https
+              basic_auth:
+                username: ${var.confluent_api_key}
+                password: ${var.confluent_api_secret}
+              metrics_path: /v2/metrics/cloud/export
+              params:
+                "resource.kafka.id":
+                  - ${var.confluent_cluster_id}
+
+    processors:
+      batch: {}
+      memory_limiter:
+        check_interval: 5s
+        limit_percentage: 75
+        spike_limit_percentage: 25
+      k8sattributes:
+        passthrough: false
+        auth_type: "serviceAccount"
+        extract:
+          metadata:
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.deployment.name
+            - k8s.namespace.name
+            - k8s.node.name
+      # container-metrics processors
+      k8sattributes/container-metrics:
+        passthrough: false
+        auth_type: "serviceAccount"
+        pod_association:
+          - from: resource_attribute
+            name: container_label_io_kubernetes_pod_uid
+        extract:
+          metadata:
+            - k8s.pod.name
+            - k8s.pod.uid
+            - k8s.deployment.name
+            - k8s.namespace.name
+            - k8s.node.name
+
+    exporters:
+      otlp/traces:
+        endpoint: api.honeycomb.io:443
+        headers:
+          "x-honeycomb-team": "$${HONEYCOMB_API_KEY}"
+
+      otlp/app-metrics:
+        endpoint: api.honeycomb.io:443
+        headers:
+          "x-honeycomb-team": "$${HONEYCOMB_API_KEY}"
+          "x-honeycomb-dataset": "app-metrics"
+
+      otlp/container-metrics:
+        endpoint: api.honeycomb.io:443
+        headers:
+          "x-honeycomb-team": "$${HONEYCOMB_API_KEY}"
+          "x-honeycomb-dataset": "container-metrics"
+
+      otlp/confluent-metrics:
+        endpoint: api.honeycomb.io:443
+        headers:
+          "x-honeycomb-team": "$${HONEYCOMB_API_KEY}"
+          "x-honeycomb-dataset": "confluent-metrics"
+
+    service:
+      pipelines:
+        traces:
+          receivers: [otlp/traces]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [otlp/traces]
+        metrics/app:
+          receivers: [prometheus/app-metrics]
+          processors: [memory_limiter, k8sattributes, batch]
+          exporters: [otlp/app-metrics]
+        metrics/container:
+          receivers: [prometheus/container-metrics]
+          processors: [memory_limiter, k8sattributes/container-metrics, batch]
+          exporters: [otlp/container-metrics]
+        metrics/confluent:
+          receivers: [prometheus/confluent-metrics]
+          processors: [memory_limiter, batch]
+          exporters: [otlp/confluent-metrics]
