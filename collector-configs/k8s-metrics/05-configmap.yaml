@@ -1,0 +1,141 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: opentelemetry-collector
+  namespace: kstats
+data:
+  opentelemetry-collector-config: |
+    receivers:
+      k8s_cluster:
+        collection_interval: 10s
+        auth_type: serviceAccount
+        node_conditions_to_report: 
+          - Ready
+          - DiskPressure
+          - MemoryPressure
+          - PIDPressure
+          - NetworkUnavailable
+        allocatable_types_to_report: 
+          - cpu
+          - memory
+          - ephemeral-storage
+          - storage
+    
+      kubeletstats:
+        collection_interval: 10s
+        auth_type: serviceAccount
+        endpoint: "${K8S_NODE_NAME}:10250"
+        insecure_skip_verify: true
+        extra_metadata_labels:
+          - container.id
+          - k8s.volume.type
+        k8s_api_config:
+          auth_type: serviceAccount
+        metric_groups:
+          - node
+          - pod
+          - container
+          - volume
+
+    processors:
+      batch:
+      metricstransform/kubeletstats:
+        transforms:
+          - include: k8s.node.network.errors
+            experimental_match_labels:
+              direction: receive
+            action: insert
+            new_name: k8s.node.network.errors.receive
+            operations:
+              - action: aggregate_labels
+                aggregation_type: sum
+                label_set: []
+          - include: k8s.node.network.errors
+            experimental_match_labels:
+              direction: transmit
+            action: insert
+            new_name: k8s.node.network.errors.transmit
+            operations:
+              - action: aggregate_labels
+                aggregation_type: sum
+                label_set: []
+          - include: k8s.node.network.io
+            experimental_match_labels:
+              direction: receive
+            action: insert
+            new_name: k8s.node.network.io.receive
+            operations:
+              - action: aggregate_labels
+                aggregation_type: sum
+                label_set: []
+          - include: k8s.node.network.io
+            experimental_match_labels:
+              direction: transmit
+            action: insert
+            new_name: k8s.node.network.io.transmit
+            operations:
+              - action: aggregate_labels
+                aggregation_type: sum
+                label_set: []
+    
+          - include: k8s.pod.network.errors
+            experimental_match_labels:
+              direction: receive
+            action: insert
+            new_name: k8s.pod.network.errors.receive
+            operations:
+              - action: aggregate_labels
+                aggregation_type: sum
+                label_set: []
+          - include: k8s.pod.network.errors
+            experimental_match_labels:
+              direction: transmit
+            action: insert
+            new_name: k8s.pod.network.errors.transmit
+            operations:
+              - action: aggregate_labels
+                aggregation_type: sum
+                label_set: []
+          - include: k8s.pod.network.io
+            experimental_match_labels:
+              direction: receive
+            action: insert
+            new_name: k8s.pod.network.io.receive
+            operations:
+              - action: aggregate_labels
+                aggregation_type: sum
+                label_set: []
+          - include: k8s.pod.network.io
+            experimental_match_labels:
+              direction: transmit
+            action: insert
+            new_name: k8s.pod.network.io.transmit
+            operations:
+              - action: aggregate_labels
+                aggregation_type: sum
+                label_set: []
+
+      filter/kubeletstats:
+        metrics:
+          exclude:
+            match_type: strict
+            metric_names:
+              - k8s.node.network.errors
+              - k8s.node.network.io
+              - k8s.pod.network.errors
+              - k8s.pod.network.io
+
+
+    exporters:
+      otlp:
+        endpoint: api.honeycomb.io:443
+        headers:
+          "x-honeycomb-team": HONEYCOMB_API_KEY
+          "x-honeycomb-dataset": kubernetes-kubeletstats
+
+    service:
+      pipelines:
+        metrics:
+          receivers: [k8s_cluster, kubeletstats]
+          processors: [metricstransform/kubeletstats, filter/kubeletstats, batch]
+          exporters: [otlp]

@@ -1,0 +1,59 @@
+receivers:
+  otlp:
+    protocols:
+      grpc:
+      http:
+
+processors:
+  # See: https://github.com/open-telemetry/opentelemetry-collector/blob/main/processor/probabilisticsamplerprocessor/README.md
+  probabilistic_sampler:
+    hash_seed: 42
+    # sampling_percentage is 1/$HONEYCOMB_SAMPLE_RATE * 100
+    sampling_percentage: $PROBABILISTIC_SAMPLE_RATE
+
+  attributes/sample-rate:
+    # Note: this will not properly take into account an existing Sample Rate (e.g. in-application sampler)
+    #       and instead overwrite it
+    actions:
+      - key: sampleRate
+        value: $HONEYCOMB_SAMPLE_RATE
+        action: upsert
+
+  batch:
+
+  memory_limiter:
+    check_interval: 5s
+    limit_percentage: 75
+    spike_limit_percentage: 25
+
+extensions:
+  health_check:
+
+exporters:
+  logging:
+    logLevel: warn
+
+  otlp/traces:
+    endpoint: api.honeycomb.io:443
+    headers:
+      x-honeycomb-team: $HONEYCOMB_API_KEY
+      x-honeycomb-dataset: $HONEYCOMB_DATASET
+
+  otlp/metrics:
+    endpoint: api.honeycomb.io:443
+    headers:
+      x-honeycomb-team: $HONEYCOMB_API_KEY
+      x-honeycomb-dataset: $HONEYCOMB_METRICS_DATASET
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors:
+        [memory_limiter, probabilistic_sampler, attributes/sample-rate, batch]
+      exporters: [logging, otlp/traces]
+
+    metrics:
+      receivers: [otlp]
+      processors: [memory_limiter, batch]
+      exporters: [logging, otlp/metrics]
