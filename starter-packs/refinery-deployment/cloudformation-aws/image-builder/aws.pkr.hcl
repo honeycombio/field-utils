@@ -24,6 +24,8 @@ source "amazon-ebs" "al2022" {
     device_name           = "/dev/xvda"
   }
 
+  // the trick to finding these names:
+  // aws ec2 describe-images --owners amazon --query 'Images[*].{ID:ImageId, Name:Name}' --output text --filters "Name=name,Values=al2023-ami-2023*-arm64"
   source_ami_filter {
     filters = {
       name                = "al2023-ami-2023*-arm64"
