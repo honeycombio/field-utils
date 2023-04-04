@@ -78,8 +78,8 @@ build {
 
   provisioner "shell" {
     environment_vars = [
-      "REFINERY_RELEASE=1.19.0",
-      "OTEL_CONFIG_RELEASE=1.6.0",
+      "REFINERY_RELEASE=1.20.0",
+      "OTEL_CONFIG_RELEASE=1.7.0",
       "CRUDE_RELEASE=0.1.5",
     ]
     scripts = [

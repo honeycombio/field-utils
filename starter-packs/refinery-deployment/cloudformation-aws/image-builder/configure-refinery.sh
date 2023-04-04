@@ -25,21 +25,32 @@ APIKeys = [
   "*",                   # wildcard accept all keys
   ]
 HoneycombAPI = "https://api.honeycomb.io"
+
 SendDelay = "2s"
 TraceTimeout = "60s"
 MaxBatchSize = 500
 SendTicker = "100ms"
-LoggingLevel = "info"
 UpstreamBufferSize = 10000
 PeerBufferSize = 10000
+
 AddHostMetadataToTrace = true
 QueryAuthToken = "JolkienRolkienRolkienTolkien"
 AddRuleReasonToTrace = true
 AddSpanCountToRoot = true
+
 CacheOverrunStrategy = "impact"
 Collector = "InMemCollector"
+
+LoggingLevel = "info"
 Logger = "honeycomb"
 Metrics = "honeycomb"
+AdditionalErrorFields = [
+  "trace.trace_id", "trace.parent_id", "service.name", "name", "host.name"
+]
+
+[SampleCacheConfig]
+Type = "cuckoo"
+KeptSize = 100_000
 
 [PeerManagement]
 Type = "redis"
@@ -50,6 +61,14 @@ UseTLS = true
 [InMemCollector]
 CacheCapacity = ${CACHE_CAPACITY}
 MaxAlloc = ${MEMTOTAL_80PCT}
+
+[StressRelief]
+Mode = "monitor"
+ActivationLevel = 75
+DeactivationLevel = 25
+StressSamplingRate = 100
+MinimumActivationDuration = "10s"
+MinimumStartupDuration = "10s"
 
 [HoneycombLogger]
 LoggerHoneycombAPI = "https://api.honeycomb.io"
@@ -63,6 +82,10 @@ MetricsHoneycombAPI = "https://api.honeycomb.io"
 MetricsAPIKey = "${HONEYCOMB_API_KEY}"
 MetricsDataset = "Refinery Metrics"
 MetricsReportingInterval = 60
+
+# [[AdditionalAttributes]]
+# 	ClusterName="MyCluster"
+#   environment="production"
 EOF
 
 cat > /etc/refinery/rules.toml <<EOF
