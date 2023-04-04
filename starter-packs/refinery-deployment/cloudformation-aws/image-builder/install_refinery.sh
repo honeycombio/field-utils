@@ -6,6 +6,24 @@ curl -L -o /tmp/refinery.rpm \
   https://github.com/honeycombio/refinery/releases/download/v${REFINERY_RELEASE}/refinery-${REFINERY_RELEASE}-1.aarch64.rpm
 sudo rpm -ivh /tmp/refinery.rpm
 
+# temporary, while we wait on https://github.com/honeycombio/refinery/pull/657
+cat <<EOF | sudo tee /usr/lib/systemd/system/refinery.service
+[Unit]
+Description=Refinery Honeycomb Trace-Aware Sampling Proxy
+After=network.target
+
+[Service]
+ExecStart=/usr/bin/refinery -c /etc/refinery/refinery.toml -r /etc/refinery/rules.toml
+KillMode=process
+Restart=on-failure
+User=honeycomb
+Group=honeycomb
+LimitNOFILE=infinity
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
 # Install the refinery config script
 sudo mv /tmp/configure-refinery.sh /usr/local/bin/configure-refinery.sh
 chmod +x /usr/local/bin/configure-refinery.sh

@@ -94,5 +94,5 @@ SampleRate = 1
 EOF
 
 # Enable Refinery
-/usr/bin/systemctl enable refinery || exit 1
-/usr/bin/systemctl start refinery || exit 1
+/usr/bin/systemctl enable refinery.service || exit 1
+/usr/bin/systemctl start refinery.service || exit 1
