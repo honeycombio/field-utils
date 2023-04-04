@@ -26,7 +26,7 @@ source "amazon-ebs" "al2022" {
 
   source_ami_filter {
     filters = {
-      name                = "al2022-ami-2022*-arm64"
+      name                = "al2023-ami-2023*-arm64"
     }
     most_recent = true
     owners      = ["amazon"]
