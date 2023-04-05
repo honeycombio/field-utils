@@ -5,7 +5,7 @@ exporters:
       x-honeycomb-team: $HNY_API_KEY
       x-honeycomb-dataset: $HNY_DATASET
   logging:
-    logLevel: info
+    loglevel: info
 receivers:
   hostmetrics:
     collection_interval: 10s

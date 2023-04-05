@@ -24,9 +24,11 @@ source "amazon-ebs" "al2022" {
     device_name           = "/dev/xvda"
   }
 
+  // the trick to finding these names:
+  // aws ec2 describe-images --owners amazon --query 'Images[*].{ID:ImageId, Name:Name}' --output text --filters "Name=name,Values=al2023-ami-2023*-arm64"
   source_ami_filter {
     filters = {
-      name                = "al2022-ami-2022*-arm64"
+      name                = "al2023-ami-2023*-arm64"
     }
     most_recent = true
     owners      = ["amazon"]
@@ -78,8 +80,8 @@ build {
 
   provisioner "shell" {
     environment_vars = [
-      "REFINERY_RELEASE=1.18.0",
-      "OTEL_CONFIG_RELEASE=1.4.0",
+      "REFINERY_RELEASE=1.20.0",
+      "OTEL_CONFIG_RELEASE=1.7.0",
       "CRUDE_RELEASE=0.1.5",
     ]
     scripts = [

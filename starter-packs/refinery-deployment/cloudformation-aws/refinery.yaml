@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: "2010-09-09"
-Description: Honeycomb.io Refinery Cluster 0.1
+Description: Honeycomb.io Refinery Cluster 0.2
 
 Parameters:
   # Required Parameters
@@ -53,7 +53,7 @@ Parameters:
   NumRefineryOnDemandInstances:
     Description: The number of On-Demand (non-spot/full-price) Refinery instances to launch. The rest up to MaxRefineryInstances will be spot instances. 0 to disable on-demand instances. Must be less than MaxRefineryInstances.
     Type: Number
-    Default: 0
+    Default: 3
   RedisInstanceType:
     Description: EC2 Instance type for Elasticache (Low performance, t4g instance class recommended)
     Default: cache.t4g.small
@@ -61,8 +61,8 @@ Parameters:
     AllowedValues: [cache.t4g.micro, cache.t4g.small, cache.t4g.medium,
       cache.m6g.large, cache.m6g.xlarge]
   RedisNumReplicas:
-    Description: 'Number of replicas per shard. 1 replica means HA, 0 means single node'
-    Type: 'Number'
+    Description: Number of replicas per shard. 1 replica means HA, 0 means single node
+    Type: Number
     Default: 1
     MinValue: 0
     MaxValue: 5
@@ -176,102 +176,94 @@ Mappings:
   # image-builder/generate-mappings.sh
   AMIRegionMap:
     eu-north-1:
-      arm64: ami-098b0e8281d2f5cf4
+      arm64: ami-019a8fcfcf999d991
     eu-west-3:
-      arm64: ami-018a82651ff228bc0
+      arm64: ami-0ae51dd2a921ffe88
     eu-west-2:
-      arm64: ami-05e23fbc43e7b5606
+      arm64: ami-0f03f573f2f7f316e
     eu-west-1:
-      arm64: ami-052ec3580e0563ca2
+      arm64: ami-05688f8f29d1b0218
     ca-central-1:
-      arm64: ami-0aae5b77f20f22f2c
+      arm64: ami-0a03bde60d55ac108
     eu-central-1:
-      arm64: ami-08800f80a6504100d
+      arm64: ami-0d6b7ac6b7e5000b2
     us-east-1:
-      arm64: ami-0fc33a34f39d9aa6e
+      arm64: ami-03d8eeb1b8cfc88e0
     us-east-2:
-      arm64: ami-0b493a5ccf25cc7aa
+      arm64: ami-0fef458e582dbe823
     us-west-1:
-      arm64: ami-045ecb55cca11ecff
+      arm64: ami-0f94630751dc54a28
     us-west-2:
-      arm64: ami-0a37f8acab9eac200
+      arm64: ami-0a3b8842f6f376202
 
 Resources:
-# Security Groups
+# Refinery AutoScale Group
 #########################################################################################
-  RefinerySecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Condition: CreateRefinerySecurityGroup
+  RefineryLaunchTemplate:
+    Type: AWS::EC2::LaunchTemplate
     Properties:
-      GroupDescription: Ingress and Egress rules for Refinery
-      SecurityGroupEgress:
-      - CidrIp: 0.0.0.0/0
-        FromPort: 0
-        IpProtocol: tcp
-        ToPort: 65535
-      SecurityGroupIngress:
-      - FromPort: 8080
-        IpProtocol: tcp
-        SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
-        ToPort: 8080
-      - FromPort: 9090
-        IpProtocol: tcp
-        SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
-        ToPort: 9090
-      - FromPort: 8000
-        IpProtocol: tcp
-        SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
-        ToPort: 8000
-      Tags:
-      - Key: Name
-        Value: !Sub ${AWS::StackName}-Refinery-SG
-      VpcId: !Ref VPC
+      LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
+      LaunchTemplateData:
+        ImageId: !FindInMap [AMIRegionMap, !Ref "AWS::Region", arm64]
+        InstanceType: !Ref InstanceType
+        IamInstanceProfile:
+          Name: !Ref InstanceProfile
+        NetworkInterfaces:
+        - DeviceIndex: 0
+          AssociatePublicIpAddress: !Ref RefineryServerAssociatePublicIpAddress
+          Groups:
+          - !If [CreateRefinerySecurityGroup , !Ref RefinerySecurityGroup, !Ref RefinerySecurityGroupId]
+          - !Ref AdminSecurityGroupId
+        EbsOptimized: true
+        KeyName: !Ref SSHKeyName
+        UserData:
+          "Fn::Base64": !Sub |
+            #!/bin/bash -ex
+            # Execute AWS::CloudFormation::Init
+            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource RefineryLaunchTemplate --region ${AWS::Region}
+    Metadata:
+      AWS::CloudFormation::Init:
+        configSets:
+          default: [refinery, monitoring, crude]
+        refinery:
+          commands:
+            01_start_refinery:
+              command: !Sub |
+                export REDIS_HOST="${ReplicationGroup.PrimaryEndPoint.Address}"
+                export REDIS_PORT="${ReplicationGroup.PrimaryEndPoint.Port}"
+                export REDIS_PASSWORD="${RedisPassword}"
+                export HONEYCOMB_API_KEY="${RefineryMetricsHoneycombAPIKey}"
+                /usr/local/bin/configure-refinery.sh
+        monitoring:
+          files:
+            /etc/otel-collector.env:
+              content: !Sub |
+                HNY_API_KEY="${RefineryMetricsHoneycombAPIKey}"
+                HNY_DATASET="hostmetrics"
+                OTEL_RESOURCE_ATTRIBUTES="service.name=refinery,deployment.environment=${AWS::StackName}"
+          commands:
+            03_otel_collector:
+              command: |
+                systemctl enable otel-collector
+                systemctl start otel-collector
+        crude:
+          files:
+            /etc/crude.env:
+              content: !Sub |
+                GIN_MODE=release
+                HONEYCOMB_API_KEY="${RefineryMetricsHoneycombAPIKey}"
+                OTEL_SERVICE_NAME="crude"
+                AWS_REGION="${AWS::Region}"
+                S3_BUCKET="${ConfigBucket}"
+            /etc/cron.d/rules_fetch:
+              content: !Sub |
+                * * * * * root aws s3 cp s3://${ConfigBucket}/rules.toml /etc/refinery/rules.toml
+          commands:
+            01_crude:
+              command: |
+                systemctl enable crude
+                systemctl start crude
 
-
-  RefinerySecurityGroupPeerTraffic:
-    Type: AWS::EC2::SecurityGroupIngress
-    Condition: CreateRefinerySecurityGroup
-    Properties:
-      GroupId: !Ref RefinerySecurityGroup
-      IpProtocol: tcp
-      SourceSecurityGroupId: !Ref RefinerySecurityGroup
-      FromPort: 8081
-      ToPort: 8081
-
-  LoadBalancerSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Condition: CreateLoadBalancerSecurityGroup
-    Properties:
-      GroupDescription: Setup Ingress/Egress for Refinery Load Balancer
-      SecurityGroupEgress:
-      - CidrIp: 0.0.0.0/0
-        FromPort: 0
-        IpProtocol: tcp
-        ToPort: 65535
-      SecurityGroupIngress:
-      - CidrIp: 0.0.0.0/0
-        FromPort: 9090
-        IpProtocol: tcp
-        ToPort: 9090
-      - CidrIp: 0.0.0.0/0
-        FromPort: 443
-        IpProtocol: tcp
-        ToPort: 443
-      Tags:
-      - Key: Name
-        Value: !Sub ${AWS::StackName}-ELB-SG
-      VpcId: !Ref VPC
-
-  AlertNotificationTopic:
-    Type: AWS::SNS::Topic
-    Properties:
-      Subscription:
-        - Endpoint:
-            !Ref ContactEmail
-          Protocol: email
-
-# Refinery Autoscale
-#########################################################################################
   RefineryAutoScaleGroup:
     Type: AWS::AutoScaling::AutoScalingGroup
     Properties:
@@ -333,14 +325,6 @@ Resources:
       AutoScalingGroupName: !Ref RefineryAutoScaleGroup
       Cooldown: '60'
       ScalingAdjustment: -1
-
-  InstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Path: /
-      Roles:
-      - !Ref RefineryRole
-
 
   RefineryALB:
     Type: "AWS::ElasticLoadBalancingV2::LoadBalancer"
@@ -474,71 +458,6 @@ Resources:
           - Key: X-Contact
             Value: !Ref ContactEmail
 
-  RefineryLaunchTemplate:
-    Type: AWS::EC2::LaunchTemplate
-    Properties:
-      LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
-      LaunchTemplateData:
-        ImageId: !FindInMap [AMIRegionMap, !Ref "AWS::Region", arm64]
-        InstanceType: !Ref InstanceType
-        IamInstanceProfile:
-          Name: !Ref InstanceProfile
-        NetworkInterfaces:
-        - DeviceIndex: 0
-          AssociatePublicIpAddress: !Ref RefineryServerAssociatePublicIpAddress
-          Groups:
-          - !If [CreateRefinerySecurityGroup , !Ref RefinerySecurityGroup, !Ref RefinerySecurityGroupId]
-          - !Ref AdminSecurityGroupId
-        EbsOptimized: true
-        KeyName: !Ref SSHKeyName
-        UserData:
-          "Fn::Base64": !Sub |
-            #!/bin/bash -ex
-            # Execute AWS::CloudFormation::Init
-            /opt/aws/bin/cfn-init -v --stack ${AWS::StackName} --resource RefineryLaunchTemplate --region ${AWS::Region}
-    Metadata:
-      AWS::CloudFormation::Init:
-        configSets:
-          default: [refinery, monitoring, crude]
-        refinery:
-          commands:
-            01_start_refinery:
-              command: !Sub |
-                export REDIS_HOST="${ReplicationGroup.PrimaryEndPoint.Address}"
-                export REDIS_PORT="${ReplicationGroup.PrimaryEndPoint.Port}"
-                export REDIS_PASSWORD="${RedisPassword}"
-                export HONEYCOMB_API_KEY="${RefineryMetricsHoneycombAPIKey}"
-
-                /usr/local/bin/configure-refinery.sh
-        monitoring:
-          files:
-            /etc/otel-collector.env:
-              content: !Sub |
-                HNY_API_KEY="${RefineryMetricsHoneycombAPIKey}"
-                HNY_DATASET="hostmetrics"
-                OTEL_RESOURCE_ATTRIBUTES="service.name=refinery,deployment.environment=${AWS::StackName}"
-          commands:
-            03_otel_collector:
-              command: |
-                systemctl enable otel-collector
-                systemctl start otel-collector
-        crude:
-          files:
-            /etc/crude.env:
-              content: !Sub |
-                GIN_MODE=release
-                HONEYCOMB_API_KEY="${RefineryMetricsHoneycombAPIKey}"
-                OTEL_SERVICE_NAME="crude"
-                AWS_REGION="${AWS::Region}"
-                S3_BUCKET="${ConfigBucket}"
-            /etc/cron.d/rules_fetch:
-              content: !Sub |
-                * * * * * root aws s3 cp s3://${ConfigBucket}/rules.toml /etc/refinery/rules.toml
-          commands:
-            01_crude:
-              command: |
-                systemctl enable crude
-                systemctl start crude
 
 # Redis Cluster
 #########################################################################################
@@ -620,6 +539,7 @@ Resources:
       ResourceRecords:
       - !GetAtt RefineryAdminALB.DNSName
 
+
 # Monitoring
 #########################################################################################
   ELB5XXExceeded:
@@ -692,9 +612,9 @@ Resources:
         - Name: AutoScalingGroupName
           Value: !Ref RefineryAutoScaleGroup
 
+
 # Configuration Bucket and Access Rules
 ################################################################################
-
   ConfigBucket:
     Type: AWS::S3::Bucket
     DeletionPolicy: Retain
@@ -737,6 +657,86 @@ Resources:
           Resource: arn:aws:s3:::*
       Roles:
       - !Ref RefineryRole
+
+  InstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+      - !Ref RefineryRole
+
+
+# Security Groups
+#########################################################################################
+  RefinerySecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateRefinerySecurityGroup
+    Properties:
+      GroupDescription: Ingress and Egress rules for Refinery
+      SecurityGroupEgress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 0
+        IpProtocol: tcp
+        ToPort: 65535
+      SecurityGroupIngress:
+      - FromPort: 8080
+        IpProtocol: tcp
+        SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
+        ToPort: 8080
+      - FromPort: 9090
+        IpProtocol: tcp
+        SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
+        ToPort: 9090
+      - FromPort: 8000
+        IpProtocol: tcp
+        SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
+        ToPort: 8000
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-Refinery-SG
+      VpcId: !Ref VPC
+
+  RefinerySecurityGroupPeerTraffic:
+    Type: AWS::EC2::SecurityGroupIngress
+    Condition: CreateRefinerySecurityGroup
+    Properties:
+      GroupId: !Ref RefinerySecurityGroup
+      IpProtocol: tcp
+      SourceSecurityGroupId: !Ref RefinerySecurityGroup
+      FromPort: 8081
+      ToPort: 8081
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Condition: CreateLoadBalancerSecurityGroup
+    Properties:
+      GroupDescription: Setup Ingress/Egress for Refinery Load Balancer
+      SecurityGroupEgress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 0
+        IpProtocol: tcp
+        ToPort: 65535
+      SecurityGroupIngress:
+      - CidrIp: 0.0.0.0/0
+        FromPort: 9090
+        IpProtocol: tcp
+        ToPort: 9090
+      - CidrIp: 0.0.0.0/0
+        FromPort: 443
+        IpProtocol: tcp
+        ToPort: 443
+      Tags:
+      - Key: Name
+        Value: !Sub ${AWS::StackName}-ELB-SG
+      VpcId: !Ref VPC
+
+  AlertNotificationTopic:
+    Type: AWS::SNS::Topic
+    Properties:
+      Subscription:
+        - Endpoint:
+            !Ref ContactEmail
+          Protocol: email
 
 # Outputs
 ################################################################################
