@@ -18,16 +18,18 @@ Parameters:
     Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
     Type: AWS::EC2::KeyPair::KeyName
   RedisPassword:
-    Description: Redis Authentication Password
+    Description: Redis Authentication Password (must be 16-128 characters, alphanumeric only)
     NoEcho: true
     Type: String
     MinLength: 16
     MaxLength: 128
-    AllowedPattern: ^[0-9a-zA-Z!&#$^<>-]*$
+    AllowedPattern: ^[0-9a-zA-Z]*$
   RefineryMetricsHoneycombAPIKey:
-    Description: The Honeycomb API Key for Refinery Metrics and Logs
+    Description: The Honeycomb API Key for Refinery Metrics and Logs (must not be a Classic key)
     NoEcho: true
     Type: String
+    MinLength: 22
+    MaxLength: 22
   AdminSecurityGroupId:
     Description: Select an existing Security Group in your VPC to define administrative ACLs (SSH, monitoring tools, etc) to the Refinery instances.
     Type: AWS::EC2::SecurityGroup::Id
@@ -687,9 +689,10 @@ Resources:
         IpProtocol: tcp
         SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
         ToPort: 9090
+      # for Crude (the admin interface, traffic comes from the RefineryAdminALB which is attached to the AdminSecurityGroupId)
       - FromPort: 8000
         IpProtocol: tcp
-        SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
+        SourceSecurityGroupId: !Ref AdminSecurityGroupId
         ToPort: 8000
       Tags:
       - Key: Name
