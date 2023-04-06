@@ -37,10 +37,12 @@ source "amazon-ebs" "al2022" {
   tags = {
     os_version        = "Amazon Linux 2022"
     source_image_name = "{{ .SourceAMIName }}"
-    ami_type          = "al2022arm"
-    ami_version       = "0.1"
+    ami_type          = "al2023arm"
+    ami_version       = "0.2"
     Name              = "Honeycomb Refinery Marketplace Image"
   }
+
+  ami_groups = ["all"]
 
   ami_regions = [
     // "ap-northeast-1",

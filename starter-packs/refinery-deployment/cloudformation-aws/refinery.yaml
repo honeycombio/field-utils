@@ -18,16 +18,18 @@ Parameters:
     Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
     Type: AWS::EC2::KeyPair::KeyName
   RedisPassword:
-    Description: Redis Authentication Password
+    Description: Redis Authentication Password (must be 16-128 characters, alphanumeric only)
     NoEcho: true
     Type: String
     MinLength: 16
     MaxLength: 128
-    AllowedPattern: ^[0-9a-zA-Z!&#$^<>-]*$
+    AllowedPattern: ^[0-9a-zA-Z]*$
   RefineryMetricsHoneycombAPIKey:
-    Description: The Honeycomb API Key for Refinery Metrics and Logs
+    Description: The Honeycomb API Key for Refinery Metrics and Logs (must not be a Classic key)
     NoEcho: true
     Type: String
+    MinLength: 22
+    MaxLength: 22
   AdminSecurityGroupId:
     Description: Select an existing Security Group in your VPC to define administrative ACLs (SSH, monitoring tools, etc) to the Refinery instances.
     Type: AWS::EC2::SecurityGroup::Id
@@ -176,25 +178,25 @@ Mappings:
   # image-builder/generate-mappings.sh
   AMIRegionMap:
     eu-north-1:
-      arm64: ami-019a8fcfcf999d991
+      arm64: ami-04f7d7facb8496e25
     eu-west-3:
-      arm64: ami-0ae51dd2a921ffe88
+      arm64: ami-065e8d68979932187
     eu-west-2:
-      arm64: ami-0f03f573f2f7f316e
+      arm64: ami-084d71bf8e50897fb
     eu-west-1:
-      arm64: ami-05688f8f29d1b0218
+      arm64: ami-0b7c76ec526aa350d
     ca-central-1:
-      arm64: ami-0a03bde60d55ac108
+      arm64: ami-095093d9dbb918b7c
     eu-central-1:
-      arm64: ami-0d6b7ac6b7e5000b2
+      arm64: ami-089d4f169a3103de6
     us-east-1:
-      arm64: ami-03d8eeb1b8cfc88e0
+      arm64: ami-0cf0e1aa4502f4b03
     us-east-2:
-      arm64: ami-0fef458e582dbe823
+      arm64: ami-021f4cabfc6b7b090
     us-west-1:
-      arm64: ami-0f94630751dc54a28
+      arm64: ami-0b3100aef493447c8
     us-west-2:
-      arm64: ami-0a3b8842f6f376202
+      arm64: ami-08327d00e94020b80
 
 Resources:
 # Refinery AutoScale Group
@@ -687,9 +689,10 @@ Resources:
         IpProtocol: tcp
         SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
         ToPort: 9090
+      # for Crude (the admin interface, traffic comes from the RefineryAdminALB which is attached to the AdminSecurityGroupId)
       - FromPort: 8000
         IpProtocol: tcp
-        SourceSecurityGroupId: !If [CreateLoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroup, !Ref LoadBalancerSecurityGroupId]
+        SourceSecurityGroupId: !Ref AdminSecurityGroupId
         ToPort: 8000
       Tags:
       - Key: Name
