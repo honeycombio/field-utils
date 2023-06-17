@@ -178,25 +178,25 @@ Mappings:
   # image-builder/generate-mappings.sh
   AMIRegionMap:
     eu-north-1:
-      arm64: ami-027398e03b062d912
+      arm64: ami-00a43734574a73e80
     eu-west-3:
-      arm64: ami-05b1e24ac58e1d88c
+      arm64: ami-0128de4335814e1ef
     eu-west-2:
-      arm64: ami-023148d7b0964a84d
+      arm64: ami-0cb4a5cf9825c2ea8
     eu-west-1:
-      arm64: ami-0ab7783c84dfcb83a
+      arm64: ami-022adc93f3acb2d5c
     ca-central-1:
-      arm64: ami-0bfddc0502cdbf0b1
+      arm64: ami-0c80cca83c9e154c6
     eu-central-1:
-      arm64: ami-0ac64d5a603470041
+      arm64: ami-0a98a180b6dbc7f28
     us-east-1:
-      arm64: ami-0298d7d12a7be8ae8
+      arm64: ami-012f44c1b7e42117c
     us-east-2:
-      arm64: ami-0b74f078bd969e6ab
+      arm64: ami-0364b3af7c0b998e3
     us-west-1:
-      arm64: ami-04ce35a1c632e136e
+      arm64: ami-005a6ecee57d2dfde
     us-west-2:
-      arm64: ami-0ecbec9694a2740bb
+      arm64: ami-02837b1d9fec984bf
 
 Resources:
 # Refinery AutoScale Group
