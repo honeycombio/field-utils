@@ -41,7 +41,7 @@ AddSpanCountToRoot = true
 CacheOverrunStrategy = "impact"
 Collector = "InMemCollector"
 
-LoggingLevel = "info"
+LoggingLevel = "error"
 Logger = "honeycomb"
 Metrics = "honeycomb"
 AdditionalErrorFields = [
