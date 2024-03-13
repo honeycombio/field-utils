@@ -28,8 +28,8 @@ from datetime import datetime
 
 HONEYCOMB_API = 'https://api.honeycomb.io/1/'  # /columns/dataset_slug
 SPAMMY_STRINGS = [
-                 'oastify', 'burp', 'xml', 'jndi', 'ldap', # pentester                 
-		         '%','{', '(', '*', '!', '?', '<', '..', '|', '&', '"', '\'', '\r', '\n','`','--','u0','\\','@'
+    'oastify', 'burp', 'xml', 'jndi', 'ldap', # pentester
+    '%','{', '(', '*', '!', '?', '<', '..', '|', '&', '"', '\'', '\r', '\n','`','--','u0','\\','@'
 ]
 
 def fetch_all_columns(dataset, api_key):
@@ -70,16 +70,16 @@ def list_spammy_columns(dataset, api_key):
     return spammy_column_ids
 
 def list_columns_by_date(dataset, api_key, date):
-     """
-     List columns by date in a dataset and return the list as an array of column IDs. The created date is set in `column_created_date_string` for now.
-     """
-     all_columns = fetch_all_columns(dataset, api_key)
-     matched_column_ids = {}
-     for column in all_columns:
-         created_at_date = datetime.fromisoformat(column['created_at']).date()
-         if date == created_at_date:            
-            matched_column_ids[column['id']] = column['key_name']            
-     return matched_column_ids
+    """
+    List columns by date in a dataset and return the list as an array of column IDs. The created date is set in `column_created_date_string` for now.
+    """
+    all_columns = fetch_all_columns(dataset, api_key)
+    matched_column_ids = {}
+    for column in all_columns:
+        created_at_date = datetime.fromisoformat(column['created_at']).date()
+        if date == created_at_date:
+            matched_column_ids[column['id']] = column['key_name']
+    return matched_column_ids
 
 def delete_columns(dataset, api_key, is_dry_run, column_ids):
     """
