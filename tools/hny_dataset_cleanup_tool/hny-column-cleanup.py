@@ -28,8 +28,8 @@ from datetime import datetime
 
 HONEYCOMB_API = 'https://api.honeycomb.io/1/'  # /columns/dataset_slug
 SPAMMY_STRINGS = [
-                 'oastify', 'burp', 'xml', 'jndi', 'ldap', # pentester                 
-		         '%','{', '(', '*', '!', '?', '<', '..', '|', '&', '"', '\'', '\r', '\n','`','--','u0','\\','@'
+    'oastify', 'burp', 'xml', 'jndi', 'ldap', # pentester
+    '%','{', '(', '*', '!', '?', '<', '..', '|', '&', '"', '\'', '\r', '\n','`','--','u0','\\','@'
 ]
 
 def fetch_all_columns(dataset, api_key):
@@ -70,16 +70,31 @@ def list_spammy_columns(dataset, api_key):
     return spammy_column_ids
 
 def list_columns_by_date(dataset, api_key, date):
-     """
-     List columns by date in a dataset and return the list as an array of column IDs. The created date is set in `column_created_date_string` for now.
-     """
-     all_columns = fetch_all_columns(dataset, api_key)
-     matched_column_ids = {}
-     for column in all_columns:
-         created_at_date = datetime.fromisoformat(column['created_at']).date()
-         if date == created_at_date:            
-            matched_column_ids[column['id']] = column['key_name']            
-     return matched_column_ids
+    """
+    List columns by date in a dataset and return the list as an array of column IDs. The created date is set in `column_created_date_string` for now.
+    """
+    all_columns = fetch_all_columns(dataset, api_key)
+    matched_column_ids = {}
+    for column in all_columns:
+        created_at_date = datetime.fromisoformat(column['created_at']).date()
+        if date == created_at_date:
+            matched_column_ids[column['id']] = column['key_name']
+    return matched_column_ids
+
+def list_columns_last_written_before(dataset, api_key, date):
+    """
+    List columns in a dataset where last_written is before specified date.
+    Returns a dictionary where key is id and value is key_name.
+    """
+    all_columns = fetch_all_columns(dataset, api_key)
+
+    return dict(
+        [
+            (column['id'], column['key_name'])
+            for column in all_columns
+            if datetime.fromisoformat(column['last_written']).date() < date
+        ]
+    )
 
 def delete_columns(dataset, api_key, is_dry_run, column_ids):
     """
@@ -117,11 +132,11 @@ if __name__ == "__main__":
         parser.add_argument('-d', '--dataset',
                             help='Honeycomb Dataset', required=True)
         parser.add_argument('-m', '--mode', default='hidden',
-                            choices=['hidden', 'spammy', 'date'], help='Type of columns to clean up')
+                            choices=['hidden', 'spammy', 'date', 'last_written_before'], help='Type of columns to clean up')
         parser.add_argument('--dry-run', default=False,
                             action=argparse.BooleanOptionalAction, help='Will print out the columns it would delete without deleting them')
         parser.add_argument('--date', type=date.fromisoformat, default=None,
-                            help='Search for columns to clean up created on date (YYYY-MM-DD)')
+                            help='Date filter to use with date and last_written_before modes (YYYY-MM-DD)')
         args = parser.parse_args()
 
         columns_to_delete = {}
@@ -132,8 +147,10 @@ if __name__ == "__main__":
             columns_to_delete = list_spammy_columns(args.dataset, args.api_key)
         elif (args.mode == 'date' and args.date is not None):
             columns_to_delete = list_columns_by_date(args.dataset, args.api_key, args.date)
-        else:            
-            parser.error('--date YYYY-MM-DD is required when using --mode date')
+        elif (args.mode == 'last_written_before' and args.date is not None):
+            columns_to_delete = list_columns_last_written_before(args.dataset, args.api_key, args.date)
+        else:
+            parser.error('--date YYYY-MM-DD is required when using --mode ' + args.mode)
 
         if len(columns_to_delete.keys()) > 0:
             delete_columns(args.dataset, args.api_key,
