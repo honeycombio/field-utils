@@ -8,9 +8,9 @@
 #                           Honeycomb API key
 #   -d DATASET, --dataset   DATASET
 #                           Honeycomb Dataset
-#   -m {hidden,spammy,date} --mode {hidden,spammy,date}
+#   -m {cutoff_date,hidden,spammy,date} --mode {cutoff_date,hidden,spammy,date}
 #                           Type of columns to clean up. `date` targets the `created_at` date.
-#   --date YYYY/MM/DD       ISO8601 date to be used with --mode date
+#   --date YYYY/MM/DD       ISO8601 date to be used with --mode date,cutoff_date
 #   --dry-run               Will print out the columns it would delete without deleting them
 #
 # Prerequisites:
@@ -81,6 +81,18 @@ def list_columns_by_date(dataset, api_key, date):
             matched_column_ids[column['id']] = column['key_name']            
      return matched_column_ids
 
+def list_columns_before_cutoff(dataset, api_key, cutoff_date):
+     """
+     List columns last written longer ago than a cutoff date.
+     """
+     all_columns = fetch_all_columns(dataset, api_key)
+     matched_column_ids = {}
+     for column in all_columns:
+         last_written = datetime.fromisoformat(column['last_written']).date()
+         if cutoff_date > last_written:       
+            matched_column_ids[column['id']] = column['key_name']            
+     return matched_column_ids
+
 def delete_columns(dataset, api_key, is_dry_run, column_ids):
     """
     Delete hidden columns in a dataset from a provided array of column IDs
@@ -117,7 +129,7 @@ if __name__ == "__main__":
         parser.add_argument('-d', '--dataset',
                             help='Honeycomb Dataset', required=True)
         parser.add_argument('-m', '--mode', default='hidden',
-                            choices=['hidden', 'spammy', 'date'], help='Type of columns to clean up')
+                            choices=['cutoff_date', 'hidden', 'spammy', 'date'], help='Type of columns to clean up')
         parser.add_argument('--dry-run', default=False,
                             action=argparse.BooleanOptionalAction, help='Will print out the columns it would delete without deleting them')
         parser.add_argument('--date', type=date.fromisoformat, default=None,
@@ -132,6 +144,8 @@ if __name__ == "__main__":
             columns_to_delete = list_spammy_columns(args.dataset, args.api_key)
         elif (args.mode == 'date' and args.date is not None):
             columns_to_delete = list_columns_by_date(args.dataset, args.api_key, args.date)
+        elif args.mode == 'cutoff_date' and args.date is not None:
+            columns_to_delete = list_columns_before_cutoff(args.dataset, args.api_key, args.date)
         else:            
             parser.error('--date YYYY-MM-DD is required when using --mode date')
 
