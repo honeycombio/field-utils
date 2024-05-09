@@ -1,0 +1,97 @@
+{
+  "resourceSpans": [
+    {
+      "resource": {
+        "attributes": [
+          {
+            "key": "service.name",
+            "value": {
+              "stringValue": "Website"
+            }
+          },
+          {
+              "key": "service.version",
+              "value": {
+                "stringValue": "0.4.3"
+              }
+          },
+          {
+              "key": "resource.attribute",
+              "value": {
+                "stringValue": "Cool."
+              }
+          }
+        ]
+      },
+      "scopeSpans": [
+        {
+          "scope": {
+            "name": "actually library.name",
+            "version": "1.0.0",
+            "attributes": [
+              {
+                "key": "scope span attribute",
+                "value": {
+                  "stringValue": "This right here!"
+                }
+              }
+            ]
+          },
+          "spans": [
+            {
+              "traceId": "5B8EFFF798038103D269B633813BC60B",
+              "spanId": "EEE19B7EC3C1B173",
+              "name": "HTTP Get with 404 and error",
+              "startTimeUnixNano": "1715181832792586068",
+              "endTimeUnixNano": "1715181855919708789",
+              "kind": 2,
+              "attributes": [
+                {
+                  "key": "http.path",
+                  "value": {
+                    "stringValue": "http://productapi/v1/soft_error"
+                  }
+                },
+                {
+                  "key": "http.status_code",
+                  "value": {
+                    "intValue": 404
+                  }
+                }
+              ],
+              "status": {
+                  "code": 2
+              }
+            },
+            {
+              "traceId": "5B8EFFF798038103D269B633813BC60B",
+              "spanId": "EEE19B7EC3C1B172",
+              "parentSpanId": "EEE19B7EC3C1B173",
+              "name": "HTTP GET with 200 status",
+              "startTimeUnixNano": "1715181843799532705",
+              "endTimeUnixNano": "1715181849901447102",
+              "kind": 2,
+              "attributes": [
+                {
+                  "key": "http.path",
+                  "value": {
+                    "stringValue": "http://productapi/api/product/v1"
+                  }
+                },
+                {
+                  "key": "http.status_code",
+                  "value": {
+                    "intValue": 200
+                  }
+                }
+              ],
+              "status": {
+                  "code": 1
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
