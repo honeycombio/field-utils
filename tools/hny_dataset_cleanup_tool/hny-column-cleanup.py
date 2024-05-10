@@ -23,6 +23,8 @@ import requests
 import sys
 import signal
 import time
+import re
+import ipdb
 from datetime import date
 from datetime import datetime
 
@@ -68,6 +70,18 @@ def list_spammy_columns(dataset, api_key):
                 spammy_column_ids[column['id']] = column['key_name']
                 break  # end the inner loop in case there's multiple matches in the same string
     return spammy_column_ids
+
+def match_columns(dataset, api_key, regex_pattern):
+    """
+    List columns in a dataset that match a regular expression and return the list as an array of column IDs
+    """
+    all_columns = fetch_all_columns(dataset, api_key)
+    pattern = re.compile(regex_pattern)
+    matched_column_ids = {}
+    for column in all_columns:
+        if pattern.match(column['key_name']):
+            matched_column_ids[column['id']] = column['key_name']
+    return matched_column_ids
 
 def list_columns_by_date(dataset, api_key, date):
     """
@@ -132,11 +146,13 @@ if __name__ == "__main__":
         parser.add_argument('-d', '--dataset',
                             help='Honeycomb Dataset', required=True)
         parser.add_argument('-m', '--mode', default='hidden',
-                            choices=['hidden', 'spammy', 'date', 'last_written_before'], help='Type of columns to clean up')
+                            choices=['hidden', 'spammy', 'date', 'last_written_before', 'regex_pattern'], help='Type of columns to clean up')
         parser.add_argument('--dry-run', default=False,
                             action=argparse.BooleanOptionalAction, help='Will print out the columns it would delete without deleting them')
         parser.add_argument('--date', type=date.fromisoformat, default=None,
                             help='Date filter to use with date and last_written_before modes (YYYY-MM-DD)')
+        parser.add_argument('--regex_pattern',
+                            help='Regular expression to match on column names')
         args = parser.parse_args()
 
         columns_to_delete = {}
@@ -145,6 +161,8 @@ if __name__ == "__main__":
             columns_to_delete = list_hidden_columns(args.dataset, args.api_key)
         elif args.mode == 'spammy':
             columns_to_delete = list_spammy_columns(args.dataset, args.api_key)
+        elif args.mode == 'regex_pattern':
+            columns_to_delete = match_columns(args.dataset, args.api_key, args.regex_pattern)
         elif (args.mode == 'date' and args.date is not None):
             columns_to_delete = list_columns_by_date(args.dataset, args.api_key, args.date)
         elif (args.mode == 'last_written_before' and args.date is not None):
