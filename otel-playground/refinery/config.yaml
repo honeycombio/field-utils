@@ -1,0 +1,54 @@
+General:
+  ConfigurationVersion: 2
+  MinRefineryVersion: v2.0
+Network:
+  ListenAddr: "0.0.0.0:8080"
+  PeerListenAddr: "0.0.0.0:8081"
+
+RefineryTelemetry:
+  AddRuleReasonToTrace: true
+  AddSpanCountToRoot: true
+  AddHostMetadataToTrace: true
+Traces:
+  LinkStrategy: RootLinkOverride
+IDFields:
+  TraceNames: [ trace.trace_id ]
+  ParentNames: [ trace.parent_id ]
+  LinkNames: [ trace.link.trace_id ]
+Debugging:
+  QueryAuthToken: sneaky-longer-token
+  AdditionalErrorFields:
+    - trace.span_id
+  DryRun: true
+Logger:
+  Type: honeycomb
+  Level: debug
+HoneycombLogger:
+  APIKey: 
+  Dataset: refinery-logs
+LegacyMetrics:
+  Enabled: true
+  APIKey: 
+  Dataset: refinery-metrics
+  ReportingInterval: 20s
+OTelMetrics:
+  Enabled: false
+PeerManagement:
+  Type: redis
+  IdentifierInterfaceName: eth0
+RedisPeerManagement:
+  Host: redis:6379
+Collection:
+  MaxAlloc: 6Gb
+Specialized:
+  AdditionalAttributes:
+    ClusterName: homelab
+GRPCServerParameters:
+  Enabled: true
+  ListenAddr: "0.0.0.0:4317"
+StressRelief:
+  Mode: monitor
+  ActivationLevel: 90
+  DeactivationLevel: 70
+  SamplingRate: 300
+  

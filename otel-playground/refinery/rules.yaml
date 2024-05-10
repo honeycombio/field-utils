@@ -1,0 +1,19 @@
+RulesVersion: 2
+Samplers:
+  __default__:
+    RulesBasedSampler:
+      Rules:
+        - Name: drop jobs
+          Drop: true
+          Conditions:
+            - Field: job.emitted_by
+              Operator: =
+              Value: worker
+        - Name: keep scheduler
+          SampleRate: 1
+          Conditions:
+            - Field: name
+              Operator: =
+              Value: "Evaluate the queue and environment"
+        - Name: Everything else 
+          SampleRate: 1
