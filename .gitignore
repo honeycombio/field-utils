@@ -39,3 +39,6 @@ stack_parameters.json
 
 # Macs
 .DS_Store
+
+# Python
+**/venv/**
