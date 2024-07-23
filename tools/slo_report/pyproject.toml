@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "slo-report"
+version = "0.1.0"
+package-mode = false
+description = ""
+authors = ["Irving Popovetsky <irving@honeycomb.io>"]
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = ">=3.10, <4.0"
+requests = "^2.32.3"
+
+[tool.poetry.group.dev.dependencies]
+flake8 = "^7.1.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
