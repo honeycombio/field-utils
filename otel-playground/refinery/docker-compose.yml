@@ -1,0 +1,35 @@
+services:
+  refinery1:
+    image: honeycombio/refinery
+    ports:
+      - 4317:4317
+      - 8080:8080
+    entrypoint:
+      - "refinery"
+    command:
+      - "-c"
+      - "/etc/refinery/config.yaml"
+      - "-r"
+      - "/etc/refinery/rules.yaml"
+    volumes:
+      - ./config.yaml:/etc/refinery/config.yaml
+      - ./rules.yaml:/etc/refinery/rules.yaml
+  refinery2:
+    image: honeycombio/refinery
+    ports:
+      - 4817:4317
+      - 8880:8080
+    entrypoint:
+      - "refinery"
+    command:
+      - "-c"
+      - "/etc/refinery/config.yaml"
+      - "-r"
+      - "/etc/refinery/rules.yaml"
+    volumes:
+      - ./config.yaml:/etc/refinery/config.yaml
+      - ./rules.yaml:/etc/refinery/rules.yaml
+  redis:
+    image: redis:6.2.5
+    expose:
+      - "6379"

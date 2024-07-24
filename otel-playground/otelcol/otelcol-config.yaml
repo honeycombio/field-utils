@@ -1,0 +1,86 @@
+exporters:
+  otlp/sampled:
+    endpoint: "localhost:8080"
+    headers:
+      "x-honeycomb-team": ""
+    compression: zstd
+    sending_queue:
+      enabled: true
+      num_consumers: 2
+  debug:
+    verbosity: detailed
+  otlp:
+    endpoint: "api.honeycomb.io:443"
+    headers:
+      "x-honeycomb-team": ""
+    compression: zstd
+    sending_queue:
+      enabled: true
+      num_consumers: 2
+  otlp/metrics:
+    endpoint: "api.honeycomb.io:443"
+    headers:
+      "x-honeycomb-team": ""
+      "x-honeycomb-dataset": "otelcol"
+
+processors:
+  memory_limiter:
+    check_interval: 5s
+    limit_mib: 16000
+    spike_limit_mib: 1000
+  batch:
+    send_batch_size: 1000
+    timeout: 150ms
+    send_batch_max_size: 2000
+  transform/labelme:
+    metric_statements:
+      - context: resource
+        statements:
+          - set(attributes["collector.name"], "${env:HOSTNAME}")
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["collector.name"], "${env:HOSTNAME}")
+      - context: span
+        statements: # The following add 48 hours to the spans so you can replay the same ones with new timestamps.
+          - set(start_time, start_time + Duration("48h"))
+          - set(end_time, end_time + Duration("48h"))
+          - set(attributes["mike.added_time"], "48 hours")
+    log_statements:
+      - context: resource
+        statements:
+          - set(attributes["collector.name"], "${env:HOSTNAME}")
+
+receivers:
+  otlp:
+    protocols:
+      grpc:
+        endpoint: 0.0.0.0:4317
+      http:
+        endpoint: 0.0.0.0:4318
+  prometheus:
+    config:
+      scrape_configs:
+        - job_name: "otelcol"
+          scrape_interval: 60s
+          static_configs:
+            - targets: ["0.0.0.0:8888"]
+          metric_relabel_configs:
+            - source_labels: [__name__]
+              regex: ".*grpc_io.*"
+              action: drop
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [memory_limiter, transform/labelme, batch]
+      exporters: [otlphttp/sampled]
+    metrics:
+      receivers: [prometheus]
+      processors: [batch, transform/labelme]
+      exporters: [otlp/metrics]
+  telemetry:
+    metrics:
+      level: detailed
+      address: ":8888"
