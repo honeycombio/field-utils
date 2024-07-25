@@ -1,10 +1,10 @@
 from .hnyapi import hnyapi_request, query_factory, craft_query_body
-import json
+import json, logging
 
 class HoneycombFetcher:
-    def __init__(self, api_key, debug=False):
+    def __init__(self, api_key):
         self.api_key = api_key
-        self.debug = debug
+        self.logger = logging.getLogger(__name__)
 
     def fetch_auth_info(self):
         """
@@ -26,15 +26,13 @@ class HoneycombFetcher:
         """
         Fetch all SLOs in a dataset and return them all as json
         """
-        if self.debug:
-            print(f"fetching SLOs for dataset: {dataset}")
+        self.logger.info(f"fetching SLOs for dataset: {dataset}")
         endpoint = f'slos/{dataset}'
         response = hnyapi_request(endpoint, self.api_key)
 
         all_slos = []
         for slo in response:
-            if self.debug:
-                print(f"  slo {slo['name']} : {slo['id']}")
+            self.logger.info(f"  slo {slo['name']} : {slo['id']}")
             all_slos.append(slo)
 
         return all_slos
@@ -43,8 +41,7 @@ class HoneycombFetcher:
         """
         Fetch burn alerts for a specific SLO in a dataset
         """
-        if self.debug:
-            print(f"fetching burn alerts for dataset: {dataset}, slo_id: {slo_id}")
+        self.logger.info(f"fetching burn alerts for dataset: {dataset}, slo_id: {slo_id}")
 
         endpoint = f'burn_alerts/{dataset}?slo_id={slo_id}'
         response = hnyapi_request(endpoint, self.api_key)
@@ -54,7 +51,7 @@ class HoneycombFetcher:
     def fetch_all_slos(self):
         all_datasets = self.fetch_all_datasets()
         if all_datasets is None:
-            print('No datasets found')
+            self.logger.critical('No datasets found')
             sys.exit(1)
 
         all_slos = []
@@ -91,8 +88,7 @@ class HoneycombFetcher:
         qb = craft_query_body(time_range=86400, filters=where_array, filter_combination="OR", breakdowns=breakdowns, calculations=[{"op": "COUNT"}])
         qr = query_factory(dataset, qb, self.api_key)
 
-        if self.debug:
-            print(json.dumps(qr, indent=2))
+        self.logger.debug(json.dumps(qr, indent=2))
         return self.agg_results(slos, qr['data']['results'])
 
     def agg_results(self, slos, results):
@@ -119,7 +115,7 @@ class HoneycombFetcher:
                     # add deduped to service list
                     if 'service.name' in res and res['service.name'] not in slo['sli_service_names']:
                         slo["sli_service_names"].append(res['service.name'])
-                    print(f"SLI: {sli}, true COUNT: {res['COUNT']}") if self.debug else None
+                    self.logger.debug(f"SLI: {sli}, true COUNT: {res['COUNT']}")
 
                 # sum up all false counts
                 if sli in res and res[sli] == False:
@@ -127,12 +123,11 @@ class HoneycombFetcher:
                     # add deduped to service list
                     if 'service.name' in res and res['service.name'] not in slo['sli_service_names']:
                         slo["sli_service_names"].append(res['service.name'])
-                    print(f"SLI: {sli}, false COUNT: {res['COUNT']}") if self.debug else None
+                    self.logger.debug(f"SLI: {sli}, false COUNT: {res['COUNT']}")
 
             slo['sli_event_count'] = slo['sli_values']["true"] + slo['sli_values']["false"]
             slo['sli_service_count'] = len(slo['sli_service_names'])
 
-        print(json.dumps(slos, indent=2))
         return slos
 
 
