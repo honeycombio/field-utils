@@ -88,7 +88,7 @@ class HoneycombFetcher:
 
         breakdowns = sli_names + ["service.name"]
 
-        qb = craft_query_body(time_range=86400, filters=where_array, breakdowns=breakdowns, calculations=[{"op": "COUNT"}])
+        qb = craft_query_body(time_range=86400, filters=where_array, filter_combination="OR", breakdowns=breakdowns, calculations=[{"op": "COUNT"}])
         qr = query_factory(dataset, qb, self.api_key)
 
         if self.debug:
@@ -114,18 +114,18 @@ class HoneycombFetcher:
             for result in results:
                 res = result['data']
                 # sum up all true counts
-                if res[sli] == True:
+                if sli in res and res[sli] == True:
                     slo['sli_values']["true"] += res['COUNT']
                     # add deduped to service list
-                    if res['service.name'] not in slo['sli_service_names']:
+                    if 'service.name' in res and res['service.name'] not in slo['sli_service_names']:
                         slo["sli_service_names"].append(res['service.name'])
                     print(f"SLI: {sli}, true COUNT: {res['COUNT']}") if self.debug else None
 
                 # sum up all false counts
-                if res[sli] == False:
+                if sli in res and res[sli] == False:
                     slo['sli_values']["false"] += res['COUNT']
                     # add deduped to service list
-                    if res['service.name'] not in slo['sli_service_names']:
+                    if 'service.name' in res and res['service.name'] not in slo['sli_service_names']:
                         slo["sli_service_names"].append(res['service.name'])
                     print(f"SLI: {sli}, false COUNT: {res['COUNT']}") if self.debug else None
 
