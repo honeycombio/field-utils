@@ -15,7 +15,7 @@ def create_query(dataset, query, api_key):
     print(f"Creating query for dataset: {dataset}") if DEBUG else None
     url = HONEYCOMB_API + 'queries/' + dataset
     response = session.post(url, headers={"X-Honeycomb-Team": api_key, "Content-Type": "application/json"}, json=query)
-    print(response.text) if DEBUG else None
+    # print(response.text) if DEBUG else None
     response.raise_for_status()
     return response.json()
 
@@ -25,7 +25,7 @@ def create_query_result(dataset, query_id, api_key):
     url = HONEYCOMB_API + 'query_results/' + dataset
     qrjson = {"query_id": query_id, "disable_series": True, "limit": 10000}
     response = session.post(url, headers={"X-Honeycomb-Team": api_key, "Content-Type": "application/json"}, json=qrjson)
-    print(response.text) if DEBUG else None
+    # print(response.text) if DEBUG else None
     response.raise_for_status()
     return response.json()
 
@@ -34,7 +34,7 @@ def get_query_result(dataset, query_result_id, api_key):
     print(f"Getting query result for query_result_id: {query_result_id}") if DEBUG else None
     url = HONEYCOMB_API + 'query_results/' + dataset + '/' + query_result_id
     response = session.get(url, headers={"X-Honeycomb-Team": api_key})
-    print(response.text) if DEBUG else None
+    # print(response.text) if DEBUG else None
     response.raise_for_status()
     return response.json()
 
