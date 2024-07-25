@@ -21,7 +21,7 @@ if __name__ == "__main__":
                             help='Honeycomb API key', required=False)
         parser.add_argument('-l', '--log-level',
                             default="info", choices=['debug', 'info', 'warning', 'error', 'critical'],
-                            help='Log level', required=False)
+                            help='Log level. Use warning or higher to only log the JSON output of this tool', required=False)
         parser.add_argument('-b', '--batch-size', type=int, default=10, required=False)
         args = parser.parse_args()
 
@@ -51,6 +51,7 @@ if __name__ == "__main__":
 
         all_slos = fetcher.fetch_all_slos()
         if all_slos is None:
+            logger.critical('No SLOs found')
             sys.exit(1)
 
         # group all SLOs by dataset

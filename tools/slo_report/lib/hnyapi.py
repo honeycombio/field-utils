@@ -1,4 +1,4 @@
-import logging, os, time
+import logging, time
 from . import session, HONEYCOMB_API
 
 logger = logging.getLogger(__name__)

@@ -1,5 +1,6 @@
 from .hnyapi import hnyapi_request, query_factory, craft_query_body
-import json, logging
+import json, logging, sys
+
 
 class HoneycombFetcher:
     def __init__(self, api_key):
@@ -69,7 +70,7 @@ class HoneycombFetcher:
         Fetch SLI data for a SLO and return it as json
         """
         query = craft_query_body(time_range=3600, breakdowns=[sli, "service.name"], calculations=[{"op": "COUNT"}])
-        query_result = query_factory(dataset, query, api_key)
+        query_result = query_factory(dataset, query, self.api_key)
 
         return query_result
 
@@ -110,7 +111,7 @@ class HoneycombFetcher:
             for result in results:
                 res = result['data']
                 # sum up all true counts
-                if sli in res and res[sli] == True:
+                if sli in res and res[sli] is True:
                     slo['sli_values']["true"] += res['COUNT']
                     # add deduped to service list
                     if 'service.name' in res and res['service.name'] not in slo['sli_service_names']:
@@ -118,7 +119,7 @@ class HoneycombFetcher:
                     self.logger.debug(f"SLI: {sli}, true COUNT: {res['COUNT']}")
 
                 # sum up all false counts
-                if sli in res and res[sli] == False:
+                if sli in res and res[sli] is False:
                     slo['sli_values']["false"] += res['COUNT']
                     # add deduped to service list
                     if 'service.name' in res and res['service.name'] not in slo['sli_service_names']:
