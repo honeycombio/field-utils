@@ -47,7 +47,7 @@ def query_factory(dataset, query, api_key):
     query_result_id = query_result['id']
 
     # poll get_query_result every second up to 30 times until complete = true
-    for i in range(30):
+    for i in range(90):
         query_result = get_query_result(dataset, query_result_id, api_key)
         if query_result['complete']:
             return query_result

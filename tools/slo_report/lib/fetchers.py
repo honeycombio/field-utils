@@ -90,6 +90,9 @@ class HoneycombFetcher:
         qr = query_factory(dataset, qb, self.api_key)
 
         self.logger.debug(json.dumps(qr, indent=2))
+        if 'data' not in qr or 'results' not in qr['data']:
+            self.logger.error(f"Query failed: {qr}")
+            return []
         return self.agg_results(slos, qr['data']['results'])
 
     def agg_results(self, slos, results):
