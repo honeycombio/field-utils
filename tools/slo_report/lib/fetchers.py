@@ -1,5 +1,5 @@
 from .hnyapi import hnyapi_request, query_factory, craft_query_body
-import json, logging, sys
+import concurrent.futures, json, logging, sys
 
 
 class HoneycombFetcher:
@@ -58,10 +58,20 @@ class HoneycombFetcher:
         all_slos = []
         for dataset in all_datasets:
             slos_for_dataset = self.fetch_all_slos_for_dataset(dataset)
-            for slo in slos_for_dataset:
-                slo['dataset'] = dataset
-                slo['burn_alerts'] = self.fetch_burn_alerts_for_slo(dataset, slo['id'])
-                all_slos.append(slo)
+
+            # fetch burn alerts in parallel to speed things up where there's lots of SLOs
+            with concurrent.futures.ThreadPoolExecutor(max_workers=10) as executor:
+                future_to_slo = {executor.submit(self.fetch_burn_alerts_for_slo, dataset, slo['id']): slo for slo in slos_for_dataset}
+
+                for future in concurrent.futures.as_completed(future_to_slo):
+                    slo = future_to_slo[future]
+                    try:
+                        slo['burn_alerts'] = future.result()
+                        # add the dataset to the slo for convenience downstream
+                        slo['dataset'] = dataset
+                        all_slos.append(slo)
+                    except Exception as exc:
+                        logger.error(f"SLO {slo['id']} generated an exception: {exc}")
 
         return all_slos
 
