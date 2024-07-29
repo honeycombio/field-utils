@@ -3,7 +3,7 @@
 # usage: slo_report
 #
 # Prerequisites:
-#   - Python 3.10+
+#   - Python 3.12+
 #   - Requests module
 #   - A Honeycomb API key with the "Run Queries and Manage SLOs" permission
 
@@ -27,7 +27,7 @@ def main():
     args = parser.parse_args()
 
     logging.basicConfig(
-        format="{asctime} {levelname} {message}",
+        format="{asctime} ({funcName}:{levelname}) {message}",
         style="{",
         datefmt="%Y-%m-%dT%H:%M:%SZ",
         level=getattr(logging, args.log_level.upper())
@@ -62,8 +62,9 @@ def main():
             slo_names = [slo['name'] for slo in slo_batch]
             logger.info(f"SLOs in this batch: {slo_names}")
             sli_data = fetcher.fetch_sli_service_values_counts(slo_batch, dataset)
+
             # output sli_data to stdout
-            print(json.dumps(sli_data, indent=2))
+            print(json.dumps(sli_data, indent=2) + "\n")
 
 
 if __name__ == "__main__":

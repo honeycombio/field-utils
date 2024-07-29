@@ -1,5 +1,6 @@
 from .hnyapi import hnyapi_request, query_factory, craft_query_body
 import concurrent.futures, json, logging, sys
+from itertools import batched
 
 
 class HoneycombFetcher:
@@ -71,7 +72,7 @@ class HoneycombFetcher:
                         slo['dataset'] = dataset
                         all_slos.append(slo)
                     except Exception as exc:
-                        logger.error(f"SLO {slo['id']} generated an exception: {exc}")
+                        self.logger.error(f"SLO {slo['id']} generated an exception: {exc}")
 
         return all_slos
 
@@ -88,22 +89,78 @@ class HoneycombFetcher:
         """
         Fetch SLI data for a list of SLOs and return the counts of service values
         """
-        sli_names = [slo['sli']['alias'] for slo in slos]
+        batch_size = len(slos)
+        attempts = 1
 
-        where_array = []
-        for sli in sli_names:
-            where_array.append({"column": sli, "op": "exists"})
+        # keep trying batches of increasingly smaller sizes down to batches of 1
+        while attempts <= 10:
+            results = []
+            errors = 0
+            for batch in batched(slos, batch_size):
+                try:
+                    sli_names = [slo['sli']['alias'] for slo in batch]
+                    where_array = [{"column": sli, "op": "exists"} for sli in sli_names]
+                    self.logger.error(f"Retry attempt {attempts} with batch size {batch_size} for SLIs: {sli_names}") if attempts > 1 else None
+                    r = self.run_sli_query(dataset,
+                                           filters=where_array,
+                                           breakdowns=sli_names + ["service.name"])
+                    results.extend(r)
+                except Exception as e:
+                    self.logger.error(f"Query attempt {attempts} failed for this batch of {batch_size}: {[slo['sli']['alias'] for slo in batch]}" + str(e))
+                    errors += 1
+                    if batch_size == 1:
+                        self.logger.error("Query failed for single item batch, skipping this one but continuing")
+                        # move on to next item batch
+                        continue
+                    break
 
-        breakdowns = sli_names + ["service.name"]
+            if errors == 0:
+                self.logger.info(f"Success on attempt {attempts} with batch size {batch_size}")
+                return self.agg_results(slos, results)
+            elif batch_size == 1:
+                self.logger.error(f"Final attempt with batch size 1 had {errors} errors, returning partial results")
+                return self.agg_results(slos, results)
+            else:
+                self.logger.error(f"Attempt {attempts} failed with {errors} errors, retrying with smaller batch size")
+                # restart the inner loop with a smaller batch size and break out of the inner loop
+                batch_size = batch_size // 2
+                attempts += 1
 
-        qb = craft_query_body(time_range=86400, filters=where_array, filter_combination="OR", breakdowns=breakdowns, calculations=[{"op": "COUNT"}])
+        self.logger.error("Somehow all all attempts failed, returning nothing")
+        return []
+
+    def run_sli_query(self, dataset, filters, breakdowns):
+        """
+        Inputs:
+            - dataset: dataset name
+            - filters: list of filters
+            - breakdowns: list of breakdowns
+        Outputs:
+            - Honeycomb query results object that is a list of dictionaries that look like:
+                  {
+                    "data": {
+                        "COUNT": 594946845,
+                        "service.name": "my_cool_service",
+                        "my_cool_sli": true
+                    }
+                  },
+        """
+        qb = craft_query_body(time_range=86400,
+                              filters=filters,
+                              filter_combination="OR",
+                              breakdowns=breakdowns,
+                              calculations=[{"op": "COUNT"}])
         qr = query_factory(dataset, qb, self.api_key)
 
-        self.logger.debug(json.dumps(qr, indent=2))
+        if 'error' in qr:
+            self.logger.debug("Raising exception: " + qr['error'])
+            raise Exception(qr['error'])
         if 'data' not in qr or 'results' not in qr['data']:
-            self.logger.error(f"Query failed: {qr}")
-            return []
-        return self.agg_results(slos, qr['data']['results'])
+            self.logger.debug("Raising exception: No query results returned")
+            raise Exception("No query results returned")
+
+        self.logger.debug(json.dumps(qr['data']['results'], indent=2))
+        return qr['data']['results']
 
     def agg_results(self, slos, results):
         """
@@ -143,47 +200,3 @@ class HoneycombFetcher:
             slo['sli_service_count'] = len(slo['sli_service_names'])
 
         return slos
-
-
-    # example result:
-    # "data": {
-    #   "series": [],
-    #   "results": [
-    #     {
-    #       "data": {
-    #         "COUNT": 1023687,
-    #         "service.name": "frontend",
-    #         "sli.frontend-latency-3500": true,
-    #         "sli.frontend-root-latency-4000ms": true,
-    #         "zoc-doctest-availibility": true
-    #       }
-    #     },
-    #     {
-    #       "data": {
-    #         "COUNT": 6187,
-    #         "service.name": "frontend",
-    #         "sli.frontend-latency-3500": true,
-    #         "sli.frontend-root-latency-4000ms": true,
-    #         "zoc-doctest-availibility": false
-    #       }
-    #     },
-    #     {
-    #       "data": {
-    #         "COUNT": 221,
-    #         "service.name": "frontend",
-    #         "sli.frontend-latency-3500": false,
-    #         "sli.frontend-root-latency-4000ms": true,
-    #         "zoc-doctest-availibility": true
-    #       }
-    #     },
-    #     {
-    #       "data": {
-    #         "COUNT": 188,
-    #         "service.name": "frontend",
-    #         "sli.frontend-latency-3500": false,
-    #         "sli.frontend-root-latency-4000ms": false,
-    #         "zoc-doctest-availibility": true
-    #       }
-    #     }
-    #   ]
-    # },
