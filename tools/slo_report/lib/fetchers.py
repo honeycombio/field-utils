@@ -112,8 +112,10 @@ class HoneycombFetcher:
                         self.logger.error("Query failed for single item batch, skipping this one but continuing")
                         # move on to next item batch
                         continue
+                    # give up on this batch so we can retry with a smaller batch size
                     break
 
+            # The batch finished, now what:
             if errors == 0:
                 self.logger.info(f"Success on attempt {attempts} with batch size {batch_size}")
                 return self.agg_results(slos, results)

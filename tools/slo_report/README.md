@@ -1,5 +1,10 @@
 # Honeycomb SLO Report Tool
 
+## Prerequisites:
+- Python 3.12+
+- Requests module
+- A Honeycomb API key with the "Run Queries and Manage SLOs" permission
+
 ## Setup
 ```
 poetry install
