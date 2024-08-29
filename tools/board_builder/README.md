@@ -10,13 +10,13 @@ A quick tool to build a default honeycomb board for a new service
 
 ## Setup
 
-```
+```shell
 poetry install
 ```
 
 or
 
-```
+```shell
 pip3 install requests
 ```
 
@@ -24,6 +24,6 @@ or simply ensure that the `requests` module is installed
 
 ## To run
 
-```
-poetry run python3 slo_report.py -k HnyConfigurationAPIKey
+```shell
+poetry run python3 board_builder.py -k HnyConfigurationAPIKey -n test-service-001 -t java -r us
 ```
