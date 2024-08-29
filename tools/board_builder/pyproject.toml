@@ -1,0 +1,18 @@
+[tool.poetry]
+authors = ["Davin Taddeo <davin@honeycomb.io>"]
+description = ""
+name = "board-builder"
+package-mode = false
+readme = "README.md"
+version = "0.1.0"
+
+[tool.poetry.dependencies]
+python = ">=3.12, <4.0"
+requests = "^2.32.3"
+
+[tool.poetry.group.dev.dependencies]
+flake8 = "^7.1.0"
+
+[build-system]
+build-backend = "poetry.core.masonry.api"
+requires = ["poetry-core"]
