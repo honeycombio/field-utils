@@ -1,5 +1,4 @@
 from .hnyapi import craft_query_body, craft_board_query, craft_board, create_column, create_dataset, check_column_exists, check_dataset_exists
-import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -36,7 +35,10 @@ class HoneycombBuilder:
         duration_query_name = "Latency"
         duration_query_description = "Heatmap of event duration in milliseconds"
         duration_qb = craft_query_body(time_range=86400,
-                                       calculations=[{"op": "HEATMAP(duration_ms)"}],)
+                                       calculations=[
+                                           {"op": "HEATMAP",
+                                            "column": "duration_ms"}
+                                            ])
         queries.append(craft_board_query(service_name,
                                          duration_query_name,
                                          duration_query_description,
@@ -137,4 +139,5 @@ class HoneycombBuilder:
         board = craft_board(board_name, dataset, queries, self.api_key, self.region)
 
         # Print the board
-        print(json.dumps(board, indent=2))
+        logger.info(f"Board URL: {board['links']['board_url']}")
+        print('\n' + board['links']['board_url'])

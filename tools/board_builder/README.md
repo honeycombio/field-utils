@@ -25,5 +25,13 @@ or simply ensure that the `requests` module is installed
 ## To run
 
 ```shell
-poetry run python3 board_builder.py -k HnyConfigurationAPIKey -n test-service-001 -t java -r us
+poetry run python3 board_builder.py -k HnyConfigurationAPIKey -n test-service-001 -t java
+```
+
+## Debugging/Info
+
+Use the `-l` or `--log-level` option to set the logging level to either `info` or `debug` to get output useful for debugging.
+
+```shell
+poetry run python3 board_builder.py -k HnyConfigurationAPIKey -n test-service-001 -t java -l info
 ```
