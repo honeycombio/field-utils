@@ -33,7 +33,7 @@ def main():
                         default="us", choices=['us', 'eu'],
                         help='Honeycomb region, default of "us", but can choose "eu" for customers using the EU datacenter', required=False)
     parser.add_argument('-l', '--log-level',
-                        default="error", choices=['debug', 'info', 'warning', 'error', 'critical'],
+                        default="warning", choices=['debug', 'info', 'warning', 'error', 'critical'],
                         help='Log level. Use warning or higher to only log the JSON output of this tool', required=False)
     args = parser.parse_args()
 
