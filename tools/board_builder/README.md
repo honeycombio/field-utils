@@ -41,3 +41,7 @@ Use the `-l` or `--log-level` option to set the logging level to either `info` o
 ```shell
 poetry run python3 board_builder.py -k HnyConfigurationAPIKey -n test-service-001 -t java -l info
 ```
+
+## Output
+
+The successful running of this tool should output a URL to your new board via STDOUT
