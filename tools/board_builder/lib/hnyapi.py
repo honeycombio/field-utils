@@ -1,5 +1,6 @@
 import logging
 from . import session, HONEYCOMB_API_US, HONEYCOMB_API_EU
+import json
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,11 @@ def check_column_exists(dataset, column, api_key, region="us"):
 
 def create_dataset(dataset, api_key, region="us"):
     logger.info(f"Creating dataset: {dataset}")
-    url = hnyapi_url(region) + 'datasets/' + dataset
-    response = session.post(url, headers={"X-Honeycomb-Team": api_key})
+    url = hnyapi_url(region) + 'datasets'
+    dataset_body = {
+        "name": dataset
+    }
+    response = session.post(url, headers={"X-Honeycomb-Team": api_key}, json=json.dumps(dataset_body))
     logger.debug(response.text)
     response.raise_for_status()
     return response.json()
@@ -54,7 +58,7 @@ def create_column(dataset, column, type, api_key, region="us"):
         "key_name": column,
         "type": type
     }
-    response = session.post(url, headers={"X-Honeycomb-Team": api_key, "Content-Type": "application/json"}, json=column_body)
+    response = session.post(url, headers={"X-Honeycomb-Team": api_key, "Content-Type": "application/json"}, json=json.dumps(column_body))
     logger.debug(response.text)
     response.raise_for_status()
     return response.json()
@@ -64,7 +68,7 @@ def create_column(dataset, column, type, api_key, region="us"):
 def create_query(dataset, query, api_key, region="us"):
     logger.info(f"Creating query for dataset: {dataset}")
     url = hnyapi_url(region) + 'queries/' + dataset
-    response = session.post(url, headers={"X-Honeycomb-Team": api_key, "Content-Type": "application/json"}, json=query)
+    response = session.post(url, headers={"X-Honeycomb-Team": api_key, "Content-Type": "application/json"}, json=json.dumps(query))
     logger.debug(response.text)
     response.raise_for_status()
     return response.json()
@@ -78,10 +82,23 @@ def create_annotation(dataset, query_id, name, description, api_key, region="us"
         "name": name,
         "description": description,
     }
-    response = session.post(url, headers={"X-Honeycomb-Team": api_key, "Content-Type": "application/json"}, json=annotation_body)
+    response = session.post(url, headers={"X-Honeycomb-Team": api_key, "Content-Type": "application/json"}, json=json.dumps(annotation_body))
     logger.debug(response.text)
     response.raise_for_status()
     return response.json()
+
+
+def craft_board_query(dataset, name, description, query_body, api_key, region="us"):
+    logger.info(f"Crafting board query: {name}")
+    logger.debug("Creating Query:" + f"{query_body}")
+    query = create_query(dataset, query_body, api_key, region)
+    logger.debug("Creating Annotation" + f"{name}")
+    annotation = create_annotation(dataset, query["id"], name, description, api_key, region)
+    board_query_reference = {
+        "query_id": query['data']['id'],
+        "annotation_id": annotation['data']['id']
+    }
+    return board_query_reference
 
 
 # quick and dirty query body for QDAPI based on https://docs.honeycomb.io/api/tag/Queries#operation/createQuery
@@ -115,6 +132,26 @@ def craft_query_body(time_range=7200, breakdowns=None, calculations=None, filter
     return query_body
 
 
+def craft_queries_json_for_boards(dataset, queries):
+    data = []
+    for query in queries:
+        item = {
+            "dataset": dataset,
+            "query_id": query["query_id"],
+            "query_annotation_id": query["annotation_id"],
+            "graph_settings": {
+                "hide_markers": False,
+                "log_scale": False,
+                "omit_missing_values": False,
+                "stacked_graphs": False,
+                "utc_xaxis": False,
+                "overlaid_charts": False,
+            }
+        }
+        data.append(item)
+        return data
+
+
 def craft_board(name, dataset, queries, api_key, region="us"):
     """
     Creates a board with the given name, dataset, and queries.
@@ -134,9 +171,10 @@ def craft_board(name, dataset, queries, api_key, region="us"):
     board = {
         "name": name,
         "dataset": dataset,
-        "queries": queries
+        "queries": craft_queries_json_for_boards(dataset, queries),
+        "column_layout": "multi"
     }
-    response = session.post(url, headers={"X-Honeycomb-Team": api_key, "Content-Type": "application/json"}, json=board)
+    response = session.post(url, headers={"X-Honeycomb-Team": api_key, "Content-Type": "application/json"}, json=json.dumps(board))
     logger.debug(response.text)
     response.raise_for_status()
     return response.json()
