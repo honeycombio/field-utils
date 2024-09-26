@@ -5,7 +5,7 @@ receivers:
       http:
 
 processors:
-  # See: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/probabilisticsamplerprocessor
+  # See: https://github.com/open-telemetry/opentelemetry-collector-contrib/tree/main/processor/probabilisticsamplerprocessor#readme
   probabilistic_sampler:
     hash_seed: 42
     # sampling_percentage is 1/$HONEYCOMB_SAMPLE_RATE * 100
