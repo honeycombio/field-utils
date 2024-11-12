@@ -106,7 +106,7 @@ def list_columns_last_written_before(dataset, api_key, date):
         [
             (column['id'], column['key_name'])
             for column in all_columns
-            if datetime.fromisoformat(column['last_written']).date() < date
+            if datetime.fromisoformat(column['last_written'].replace("Z", "+00:00")).date() < date
         ]
     )
 
