@@ -1,0 +1,20 @@
+{
+    "name": "Go",
+    "dockerComposeFile": [
+        "./docker-compose-apps.yml",
+        "./docker-compose.yml"
+    ],
+    "service": "workspace",
+    "forwardPorts": [
+        4317,
+        4318,
+        8088
+    ],
+    "postCreateCommand": "bash .devcontainer/postCreateCommand.sh",
+    "shutdownAction": "stopCompose",
+    "workspaceFolder": "/workspace",
+    "features": {
+        "ghcr.io/devcontainers/features/docker-outside-of-docker:1": {},
+        "ghcr.io/guiyomh/features/vim:0": {}
+    }
+}

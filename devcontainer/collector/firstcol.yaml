@@ -1,0 +1,52 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        include_metadata: true
+
+processors:
+  batch:
+    metadata_keys: 
+      - x-honeycomb-team
+    metadata_cardinality_limit: 30
+
+  transform:
+    error_mode: ignore
+    trace_statements:
+      - context: resource
+        statements:
+          - set(attributes["collector.before_refinery"], "${env:HOSTNAME}")
+
+exporters:
+  debug:
+    verbosity: detailed
+  file:
+    path: ./output.json
+  otlphttp/refinery:
+    endpoint: "http://refinery1:8080"
+    auth:
+      authenticator: headers_setter
+
+extensions:
+  headers_setter:
+    headers:
+      - action: upsert
+        key: x-honeycomb-team
+        from_context: x-honeycomb-team
+    
+service:
+  extensions: 
+    - headers_setter
+  pipelines:
+    traces:
+      receivers: [otlp]
+      processors: [transform, batch]
+      exporters: [otlphttp/refinery]
+    logs:
+      receivers: [otlp]
+      processors: [transform, batch]
+      exporters: [otlphttp/refinery]
+  telemetry:
+    logs:
+      level: debug

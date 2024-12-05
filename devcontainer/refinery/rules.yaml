@@ -1,0 +1,7 @@
+RulesVersion: 2
+Samplers:
+  __default__:
+    RulesBasedSampler:
+      Rules:
+        - Name: Everything 
+          SampleRate: 1         
