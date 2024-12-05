@@ -55,8 +55,8 @@ StressRelief:
 Traces:
   SendDelay: 3s
   TraceTimeout: 5s
-OTelTracing:
-  Enabled: true
-  APIKey: hcaik_xxxxxxxxxxxxxxxxxxxxxxxxxx
-  SampleRate: 1
-  Dataset: "refinery-traces"
+#OTelTracing:
+#  Enabled: true
+#  APIKey: hcaik_xxxxxxxxxxxxxxxxxxxxxxxxxx
+#  SampleRate: 1
+#  Dataset: "refinery-traces"
