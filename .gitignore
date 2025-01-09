@@ -42,3 +42,5 @@ stack_parameters.json
 
 # Python
 **/venv/**
+
+.devcontainer

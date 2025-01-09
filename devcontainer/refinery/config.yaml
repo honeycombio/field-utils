@@ -1,0 +1,62 @@
+Network:
+  ListenAddr: 0.0.0.0:8080
+  PeerListenAddr: 0.0.0.0:8081
+  HoneycombAPI: http://workspace:8088
+GRPCServerParameters:
+  Enabled: true
+  ListenAddr: 0.0.0.0:4317
+  MaxRecvMsgSize: 15MB
+AccessKeys:
+  AcceptOnlyListedKeys: false
+Collection:
+  AvailableMemory: 4GB
+  MaxMemoryPercentage: 88
+  CacheCapacity: 200_000
+  IncomingQueueSize: 500_000
+  PeerQueueSize: 500_000
+BufferSizes:
+  UpstreamBufferSize: 500_000
+  PeerBufferSize: 500_000
+Debugging:
+  AdditionalErrorFields:
+    - collector.name
+    - service.name
+    - trace.trace_id
+    - trace.span_id
+    - trace.parent_id
+    - name
+General:
+  ConfigurationVersion: 2
+  MinRefineryVersion: v2.0
+Logger:
+  Type: honeycomb  
+  Level: info 
+HoneycombLogger:
+  Dataset: refinery-logs
+  SamplerEnabled: false
+LegacyMetrics:
+  Dataset: refinery-metrics
+  Enabled: true
+  ReportingInterval: 30s
+OTelMetrics:
+  Dataset: refinery-otel-metrics
+  Enabled: true
+  ReportingInterval: 30s
+PrometheusMetrics:
+  Enabled: true
+RefineryTelemetry:
+  AddRuleReasonToTrace: true
+  AddCountsToRoot: true
+StressRelief:
+  ActivationLevel: 95
+  DeactivationLevel: 70
+  Mode: never
+  MinimumActivationDuration: 4s
+Traces:
+  SendDelay: 3s
+  TraceTimeout: 5s
+#OTelTracing:
+#  Enabled: true
+#  APIKey: hcaik_xxxxxxxxxxxxxxxxxxxxxxxxxx
+#  SampleRate: 1
+#  Dataset: "refinery-traces"

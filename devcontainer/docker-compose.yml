@@ -1,0 +1,12 @@
+version: '3'
+services:
+  workspace:
+    image: "mcr.microsoft.com/devcontainers/go:dev-1.22-bookworm"
+    volumes:
+      - ..:/workspace:cached
+      - /var/run/docker.sock:/var/run/docker.sock
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    command: /bin/sh -c "while sleep 1000; do :; done"
