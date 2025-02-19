@@ -1,0 +1,110 @@
+mode: deployment
+
+image:
+  repository: ghcr.io/mterhar/opentelemetry-collector-releases/otelcol-contrib
+  tag: webhook-v1
+
+command:
+  name: otelcol-contrib
+
+extraEnvs:
+  - name: HONEYCOMB_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: honeycomb
+        key: api-key
+
+# We only want one of these collectors - any more and we'd produce duplicate data
+replicaCount: 1
+
+presets:
+  # enables the k8sclusterreceiver and adds it to the metrics pipelines
+  clusterMetrics:
+    enabled: false
+  # enables the k8sobjectsreceiver to collect events only and adds it to the logs pipelines
+  kubernetesEvents:
+    enabled: false
+
+config:
+  receivers:
+    webhookevent:
+      endpoint: "0.0.0.0:8080"
+      path: "/v1/webhook"
+      required_header:
+        key: "authorization"
+        value: "Bearer blah:blah2"
+    prometheus: null
+    jaeger: null
+    zipkin: null
+  processors:
+    transform/add-auth0-k8s-source:
+      error_mode: ignore
+      log_statements:
+        - context: log
+          statements:
+            - set(attributes["auth0.k8s.source"], "${env:MY_POD_IP}")
+    transform/unpack-flatten-string:
+      error_mode: propagate
+      log_statements:
+        - context: log
+          statements:
+            - merge_maps(cache, ParseJSON(body), "upsert") where IsMatch(body, "^\\{")
+            - flatten(cache)
+            - merge_maps(attributes, cache, "upsert")
+
+  exporters:
+    otlp/auth0:
+      endpoint: "api.honeycomb.io:443" # US instance
+      #endpoint: "api.eu1.honeycomb.io:443" # EU instance
+      headers:
+        "x-honeycomb-team": "${env:HONEYCOMB_API_KEY}"
+        "x-honeycomb-dataset": "auth0-logs"
+    debug:
+      verbosity: detailed
+
+  service:
+    pipelines:
+      traces: null
+      metrics: null
+      logs:
+        receivers: [ webhookevent ]
+        processors: [ memory_limiter, transform/add-auth0-k8s-source, transform/unpack-flatten-string, batch ]
+        exporters: [ otlp/auth0, debug ]
+        
+ports:
+  webhookevents:
+    enabled: true
+    containerPort: 8080
+    servicePort: 8080
+    protocol: TCP
+  otlp:
+    enabled: false
+  otlp-http:
+    enabled: false
+  jaeger-compact:
+    enabled: false
+  jaeger-thrift:
+    enabled: false
+  jaeger-grpc:
+    enabled: false
+  zipkin:
+    enabled: false
+
+ingress:
+  enabled: true
+  ingressClassName: alb
+  annotations: 
+    kubernetes.io/ingress.class: alb
+    alb.ingress.kubernetes.io/certificate-arn: ARN FOR YOUR TLS CERTIFICATE... YOU NEED IT TO BE A PROPER CERT.
+    alb.ingress.kubernetes.io/scheme: internet-facing
+    alb.ingress.kubernetes.io/target-type: ip
+  hosts:
+    - host: "auth0-otel-webhook-receiver.customersuccess.hny.wtf"
+      paths:
+        - path: /
+          pathType: Prefix
+          port: 8080
+  tls:
+    - hosts:
+        - "auth0-otel-webhook-receiver.customersuccess.hny.wtf"
+      secretName: auth0-otel-webhook-receiver-tls
