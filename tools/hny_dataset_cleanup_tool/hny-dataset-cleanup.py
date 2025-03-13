@@ -8,8 +8,9 @@
 #   -h, --help              show this help message and exit
 #   -k API_KEY, --api-key   API_KEY
 #                           Honeycomb API key for your Environment, with Create Dataset permission
-#   -m {spammy,date} --mode {spammy,date}
+#   -m {spammy,date,lastwritten} --mode {spammy,date,lastwritten}
 #                           Type of datasets to clean up. `date` targets the `created_at` date.
+#                           `lastwritten` targets datasets with no writes since date.
 #   --date YYYY/MM/DD       ISO8601 date to be used with --mode date
 #   --dry-run               Will print out the datasets it would delete without deleting them
 #
@@ -69,6 +70,18 @@ def list_datasets_by_date(api_key, date):
             matched_dataset_slugs[dataset['slug']] = dataset['slug']
      return matched_dataset_slugs
 
+def list_datasets_by_last_written_at(api_key, date):
+     """
+     List datasets by date in a Environment and return the list as an array of dataset slugs. The created date is set in `dataset_created_date_string` for now.
+     """
+     all_datasets = fetch_all_datasets(api_key)
+     matched_dataset_slugs = {}
+     for dataset in all_datasets:
+         last_written_at_date = datetime.fromisoformat(dataset['last_written_at']).date()
+         if date > last_written_at_date:
+            matched_dataset_slugs[dataset['slug']] = dataset['slug']
+     return matched_dataset_slugs
+
 def remove_delete_protection(api_key, is_dry_run, dataset_slugs):
     """
     Remove delete protection on a defined set of datasets.
@@ -85,7 +98,7 @@ def remove_delete_protection(api_key, is_dry_run, dataset_slugs):
             # A tiny bit of error handling
             if response.status_code in [429, 500, 502, 503, 504]:
                 print('Received a retryable error ' +
-                      response.status_code + ' sleeping and retrying...')
+                      str(response.status_code) + ' sleeping and retrying...')
                 # Put a long-ish sleep here to cope with the default rate limit of 10 requests per minute
                 time.sleep(30)
                 response = requests.put(url + '/' + slug, headers=headers, data=payload)
@@ -111,7 +124,7 @@ def delete_datasets(api_key, is_dry_run, dataset_slugs):
             # A tiny bit of error handling
             if response.status_code in [429, 500, 502, 503, 504]:
                 print('Received a retryable error ' +
-                      response.status_code + ' sleeping and retrying...')
+                      str(response.status_code) + ' sleeping and retrying...')
                 # Put a long-ish sleep here to cope with the default rate limit of 10 requests per minute
                 time.sleep(30)
                 response = requests.delete(url + '/' + slug, headers=headers)
@@ -129,7 +142,7 @@ if __name__ == "__main__":
         parser.add_argument('-k', '--api-key',
                             help='Honeycomb API key', required=True)
         parser.add_argument('-m', '--mode', default='spammy',
-                            choices=['spammy', 'date'], help='Type of datasets to clean up')
+                            choices=['spammy', 'date', 'lastwritten'], help='Type of datasets to clean up')
         parser.add_argument('--dry-run', default=False,
                             action=argparse.BooleanOptionalAction, help='Will print out the datasets it would delete without deleting them')
         parser.add_argument('--date', type=date.fromisoformat, default=None,
@@ -142,6 +155,8 @@ if __name__ == "__main__":
             datasets_to_delete = list_spammy_datasets(args.api_key)
         elif (args.mode == 'date' and args.date is not None):
             datasets_to_delete = list_datasets_by_date(args.api_key, args.date)
+        elif (args.mode == 'lastwritten' and args.date is not None):
+            datasets_to_delete = list_datasets_by_last_written_at(args.api_key, args.date)
         else:
             parser.error('--date YYYY-MM-DD is required when using --mode date')
 
