@@ -51,20 +51,24 @@ The examples below are for only trace data so if you're sending metrics through 
     error_mode: ignore
     trace_statements:
       - statements:
-          - set(resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}") where resource.attributes["otel.collector.path"] == nil
-          - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> ")) where resource.attributes["otel.collector.path"] != nil
-          - set(resource.attributes["otel.collector.${env:PIPELINE_COMPONENT}.pod.name"], "${env:COLLECTOR_NAME}")
+        - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> ")) where resource.attributes["otel.collector.path"] != nil
+        - set(resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}") where resource.attributes["otel.collector.path"] == nil
+        - set(resource.attributes["otel.collector.${env:PIPELINE_COMPONENT}.pod.name"], "${env:COLLECTOR_NAME}")
     log_statements:
       - statements:
-          - set(resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}") where resource.attributes["otel.collector.path"] == nil
-          - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> ")) where resource.attributes["otel.collector.path"] != nil
-          - set(resource.attributes["otel.collector.${env:PIPELINE_COMPONENT}.pod.name"], "${env:COLLECTOR_NAME}")
+        - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> ")) where resource.attributes["otel.collector.path"] != nil
+        - set(resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}") where resource.attributes["otel.collector.path"] == nil
+        - set(resource.attributes["otel.collector.${env:PIPELINE_COMPONENT}.pod.name"], "${env:COLLECTOR_NAME}")
     metric_statements:
       - statements:
-          - set(resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}") where resource.attributes["otel.collector.path"] == nil
-          - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> ")) where resource.attributes["otel.collector.path"] != nil
-          - set(resource.attributes["otel.collector.${env:PIPELINE_COMPONENT}.pod.name"], "${env:COLLECTOR_NAME}")
+        - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> ")) where resource.attributes["otel.collector.path"] != nil
+        - set(resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}") where resource.attributes["otel.collector.path"] == nil
+        - set(resource.attributes["otel.collector.${env:PIPELINE_COMPONENT}.pod.name"], "${env:COLLECTOR_NAME}")
 ```
+
+Note that the rules are executed in order so you have to handle the "field has no value" case first.
+
+Also notice we are using the resource attributes so it doesn't have to process as many objects.
 
 ### Add the transform to the pipeline
 
