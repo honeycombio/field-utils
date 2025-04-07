@@ -1,0 +1,26 @@
+services:
+  firstcol:
+    image: otel/opentelemetry-collector-k8s:0.123.0
+    environment:
+      - HOSTNAME=firstcol
+      - COLLECTOR_NAME=firstcol
+    ports:
+      - 4317:4317
+      - 4318:4318
+    volumes:
+      - /Users/mterhar/code/honeycomb-scratchpad/field-utils/collector-configs/add-pod-names/collector-config.yaml:/collector/config.yaml
+    entrypoint:
+      - "/otelcol-k8s"
+    command:
+      - "--config=/collector/config.yaml"
+  secondcol:
+    image: otel/opentelemetry-collector-k8s:0.123.0
+    environment:
+      - HOSTNAME=secondcol
+      - COLLECTOR_NAME=secondcol
+    volumes:
+      - /Users/mterhar/code/honeycomb-scratchpad/field-utils/collector-configs/add-pod-names/collector-config2.yaml:/collector/config.yaml
+    entrypoint:
+      - "/otelcol-k8s"
+    command:
+      - "--config=/collector/config.yaml"
