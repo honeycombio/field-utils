@@ -19,7 +19,7 @@ services:
       - COLLECTOR_NAME=secondcol
       - PIPELINE_COMPONENT=gateway
     volumes:
-      - ./collector-config2.yaml:/collector/config.yaml
+      - /collector-config2.yaml:/collector/config.yaml
     entrypoint:
       - "/otelcol-k8s"
     command:

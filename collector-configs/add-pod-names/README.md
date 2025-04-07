@@ -28,14 +28,15 @@ extraVars:
   - name: PIPELINE_COMPONENT
     value: "agent"
   - name: COLLECTOR_NAME
-    value: "$(POD_NAME)-agent"
+    value: "$(POD_NAME)"
 ```
 
 If you're using Docker Compose, there isn't a "valueFrom" thing so just set the value.
 
 ```yaml
   env:
-    COLLECTOR_NAME: "compose-agent"
+    COLLECTOR_NAME: "compose"
+    PIPELINE_COMPONENT: "agent"
 ```
 
 ## Collector Configuration
@@ -52,20 +53,18 @@ The examples below are for only trace data so if you're sending metrics through 
       - statements:
           - set(resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}") where resource.attributes["otel.collector.path"] == nil
           - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> ")) where resource.attributes["otel.collector.path"] != nil
-          - set(resource.attributes["otel.collector.gateway.pod.name"], "${env:COLLECTOR_NAME}")
+          - set(resource.attributes["otel.collector.${env:PIPELINE_COMPONENT}.pod.name"], "${env:COLLECTOR_NAME}")
     log_statements:
       - statements:
           - set(resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}") where resource.attributes["otel.collector.path"] == nil
           - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> ")) where resource.attributes["otel.collector.path"] != nil
-          - set(resource.attributes["otel.collector.gateway.pod.name"], "${env:COLLECTOR_NAME}")
+          - set(resource.attributes["otel.collector.${env:PIPELINE_COMPONENT}.pod.name"], "${env:COLLECTOR_NAME}")
     metric_statements:
       - statements:
           - set(resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}") where resource.attributes["otel.collector.path"] == nil
           - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> ")) where resource.attributes["otel.collector.path"] != nil
-          - set(resource.attributes["otel.collector.gateway.pod.name"], "${env:COLLECTOR_NAME}")
+          - set(resource.attributes["otel.collector.${env:PIPELINE_COMPONENT}.pod.name"], "${env:COLLECTOR_NAME}")
 ```
-
-Note the use of `otel.collector.gateway.pod.name`. You'll want to set that to agent for the daemonset config. 
 
 ### Add the transform to the pipeline
 
