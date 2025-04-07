@@ -3,6 +3,7 @@ services:
     image: otel/opentelemetry-collector-k8s:0.123.0
     environment:
       - COLLECTOR_NAME=firstcol
+      - PIPELINE_COMPONENT=agent
     ports:
       - 4317:4317
       - 4318:4318
@@ -16,6 +17,7 @@ services:
     image: otel/opentelemetry-collector-k8s:0.123.0
     environment:
       - COLLECTOR_NAME=secondcol
+      - PIPELINE_COMPONENT=gateway
     volumes:
       - ./collector-config2.yaml:/collector/config.yaml
     entrypoint:

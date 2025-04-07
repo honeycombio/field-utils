@@ -15,12 +15,14 @@ processors:
     error_mode: ignore
     trace_statements:
       - statements:
-          - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> "))
-          - set(resource.attributes["otel.collector.agent.pod.name"], "${env:COLLECTOR_NAME}")
+          - set(resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}") where resource.attributes["otel.collector.path"] == nil
+          - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> ")) where resource.attributes["otel.collector.path"] != nil
+          - set(resource.attributes["otel.collector.${env:PIPELINE_COMPONENT}.pod.name"], "${env:COLLECTOR_NAME}")
     log_statements:
       - statements:
-          - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> ")) 
-          - set(resource.attributes["otel.collector.agent.pod.name"], "${env:COLLECTOR_NAME}")
+          - set(resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}") where resource.attributes["otel.collector.path"] == nil
+          - set(resource.attributes["otel.collector.path"], Concat([resource.attributes["otel.collector.path"], "${env:COLLECTOR_NAME}"], " -> ")) where resource.attributes["otel.collector.path"] != nil
+          - set(resource.attributes["otel.collector.${env:PIPELINE_COMPONENT}.pod.name"], "${env:COLLECTOR_NAME}")
 
 exporters:
   debug:
