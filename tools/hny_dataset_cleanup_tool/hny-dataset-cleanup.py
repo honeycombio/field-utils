@@ -82,57 +82,65 @@ def list_datasets_by_last_written_at(api_key, date):
             matched_dataset_slugs[dataset['slug']] = dataset['slug']
      return matched_dataset_slugs
 
+def parse_retry_after(retry_after):
+    """
+    Parse the Retry-After header which can be either:
+    - A number of seconds
+    - An ISO 8601 date (e.g., "2025-02-27T15:38:09Z")
+    Returns the number of seconds to wait
+    """
+    try:
+        # First try to parse as a number of seconds
+        return int(retry_after)
+    except ValueError:
+        try:
+            # If that fails, try to parse as an ISO 8601 date
+            retry_date = datetime.fromisoformat(retry_after.replace('Z', '+00:00'))
+            now = datetime.now(retry_date.tzinfo)
+            delta = retry_date - now
+            return max(0, int(delta.total_seconds()))
+        except ValueError:
+            # If both parsing attempts fail, return default of 30 seconds
+            return 30
+
+def handle_response(response, slug, action):
+    if response.status_code == 429:
+        retry_after = response.headers.get('Retry-After', '30')
+        wait_seconds = parse_retry_after(retry_after)
+        print(f'Rate limited. Waiting {wait_seconds} seconds before retrying...')
+        time.sleep(wait_seconds)
+        return True
+    elif response.status_code in [500, 502, 503, 504]:
+        print('Received a retryable error ' + str(response.status_code) + ' sleeping and retrying...')
+        time.sleep(30)
+        return True
+    elif response.status_code != 200 and response.status_code != 202:
+        print('Failed: Unable to ' + action + ' dataset slug ' + slug + ': ' + response.text)
+        print('Moving on to the next dataset...')
+    return False
+
 def remove_delete_protection(api_key, is_dry_run, dataset_slugs):
-    """
-    Remove delete protection on a defined set of datasets.
-    """
     url = HONEYCOMB_API + 'datasets'
     headers = {"X-Honeycomb-Team": api_key}
     payload = '{"settings": {"delete_protected": false}}'
     for slug in dataset_slugs.keys():
         print('Removing delete protection from dataset slug: ' + slug + '...')
-
         if not is_dry_run:
-            response = requests.put(url + '/' + slug, headers=headers, data=payload)
-
-            # A tiny bit of error handling
-            if response.status_code in [429, 500, 502, 503, 504]:
-                print('Received a retryable error ' +
-                      str(response.status_code) + ' sleeping and retrying...')
-                # Put a long-ish sleep here to cope with the default rate limit of 10 requests per minute
-                time.sleep(30)
+            while True:
                 response = requests.put(url + '/' + slug, headers=headers, data=payload)
-            elif response.status_code != 200:
-                print(response.status_code)
-                print('Failed: Unable to remove delete protection from dataset slug' +
-                      slug + ': ' + response.text)
-                print('Moving on to the next dataset...')
-
+                if not handle_response(response, slug, 'remove delete protection from'):
+                    break
 
 def delete_datasets(api_key, is_dry_run, dataset_slugs):
-    """
-    Delete datasets from a provided array of dataset IDs
-    """
     url = HONEYCOMB_API + 'datasets'
     headers = {"X-Honeycomb-Team": api_key}
     for slug in dataset_slugs.keys():
         print('Deleting dataset slug: ' + slug + '...')
-
         if not is_dry_run:
-            response = requests.delete(url + '/' + slug, headers=headers)
-
-            # A tiny bit of error handling
-            if response.status_code in [429, 500, 502, 503, 504]:
-                print('Received a retryable error ' +
-                      str(response.status_code) + ' sleeping and retrying...')
-                # Put a long-ish sleep here to cope with the default rate limit of 10 requests per minute
-                time.sleep(30)
+            while True:
                 response = requests.delete(url + '/' + slug, headers=headers)
-            elif response.status_code != 202:
-                print('Failed: Unable to delete dataset slug' +
-                      slug + ': ' + response.text)
-                print('Moving on to the next dataset...')
-
+                if not handle_response(response, slug, 'delete'):
+                    break
 
 if __name__ == "__main__":
     try:
