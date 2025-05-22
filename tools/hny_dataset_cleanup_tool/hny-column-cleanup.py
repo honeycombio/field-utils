@@ -109,6 +109,27 @@ def list_columns_last_written_before(dataset, api_key, date):
         ]
     )
 
+def parse_retry_after(retry_after):
+    """
+    Parse the Retry-After header which can be either:
+    - A number of seconds
+    - An ISO 8601 date (e.g., "2025-02-27T15:38:09Z")
+    Returns the number of seconds to wait
+    """
+    try:
+        # First try to parse as a number of seconds
+        return int(retry_after)
+    except ValueError:
+        try:
+            # If that fails, try to parse as an ISO 8601 date
+            retry_date = datetime.fromisoformat(retry_after.replace('Z', '+00:00'))
+            now = datetime.now(retry_date.tzinfo)
+            delta = retry_date - now
+            return max(0, int(delta.total_seconds()))
+        except ValueError:
+            # If both parsing attempts fail, return default of 30 seconds
+            return 30
+
 def delete_columns(dataset, api_key, is_dry_run, column_ids):
     """
     Delete hidden columns in a dataset from a provided array of column IDs
@@ -120,19 +141,25 @@ def delete_columns(dataset, api_key, is_dry_run, column_ids):
               ' Name: ' + column_ids[id] + '...')
 
         if not is_dry_run:
-            response = requests.delete(url + '/' + id, headers=headers)
-
-            # A tiny bit of error handling
-            if response.status_code in [429, 500, 502, 503, 504]:
-                print('Received a retryable error ' +
-                      str(response.status_code) + ' sleeping and retrying...')
-                # Put a long-ish sleep here to cope with the default rate limit of 10 requests per minute
-                time.sleep(30)
+            while True:
                 response = requests.delete(url + '/' + id, headers=headers)
-            elif response.status_code != 204:
-                print('Failed: Unable to delete column ID' +
-                      id + ': ' + response.text)
-                print('Moving on to the next column...')
+
+                if response.status_code == 429:
+                    retry_after = response.headers.get('Retry-After', '30')
+                    wait_seconds = parse_retry_after(retry_after)
+                    print(f'Rate limited. Waiting {wait_seconds} seconds before retrying...')
+                    time.sleep(wait_seconds)
+                    continue
+                elif response.status_code in [500, 502, 503, 504]:
+                    print('Received a retryable error ' +
+                          str(response.status_code) + ' sleeping and retrying...')
+                    time.sleep(30)
+                    continue
+                elif response.status_code != 204:
+                    print('Failed: Unable to delete column ID ' +
+                          id + ': ' + response.text)
+                    print('Moving on to the next column...')
+                break  # Exit the retry loop on success or non-retryable error
 
 
 if __name__ == "__main__":
