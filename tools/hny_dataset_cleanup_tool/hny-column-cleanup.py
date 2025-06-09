@@ -126,7 +126,7 @@ def delete_columns(dataset, api_key, is_dry_run, column_ids):
             # A tiny bit of error handling
             if response.status_code in [429, 500, 502, 503, 504]:
                 print('Received a retryable error ' +
-                      response.status_code + ' sleeping and retrying...')
+                      str(response.status_code) + ' sleeping and retrying...')
                 # Put a long-ish sleep here to cope with the default rate limit of 10 requests per minute
                 time.sleep(30)
                 response = requests.delete(url + '/' + id, headers=headers)
