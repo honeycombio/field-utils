@@ -24,6 +24,7 @@ import sys
 import signal
 import time
 import re
+import email.utils
 from datetime import date
 from datetime import datetime
 
@@ -111,24 +112,19 @@ def list_columns_last_written_before(dataset, api_key, date):
 
 def parse_retry_after(retry_after):
     """
-    Parse the Retry-After header which can be either:
-    - A number of seconds
-    - An ISO 8601 date (e.g., "2025-02-27T15:38:09Z")
+    Parse the Retry-After header as an HTTP date (e.g., "Fri, 31 Dec 1999 23:59:59 GMT")
     Returns the number of seconds to wait
     """
     try:
-        # First try to parse as a number of seconds
-        return int(retry_after)
-    except ValueError:
-        try:
-            # If that fails, try to parse as an ISO 8601 date
-            retry_date = datetime.fromisoformat(retry_after.replace('Z', '+00:00'))
-            now = datetime.now(retry_date.tzinfo)
-            delta = retry_date - now
-            return max(0, int(delta.total_seconds()))
-        except ValueError:
-            # If both parsing attempts fail, return default of 30 seconds
-            return 30
+        # Parse as an HTTP date format
+        retry_date = email.utils.parsedate_to_datetime(retry_after)
+        now = datetime.now(retry_date.tzinfo)
+        delta = retry_date - now
+        # Add 1 second buffer to account for processing time
+        return max(1, int(delta.total_seconds()) + 1)
+    except (ValueError, TypeError):
+        # If parsing fails, return default of 30 seconds
+        return 30
 
 def delete_columns(dataset, api_key, is_dry_run, column_ids):
     """
@@ -147,7 +143,7 @@ def delete_columns(dataset, api_key, is_dry_run, column_ids):
                 if response.status_code == 429:
                     retry_after = response.headers.get('Retry-After', '30')
                     wait_seconds = parse_retry_after(retry_after)
-                    print(f'Rate limited. Waiting {wait_seconds} seconds before retrying...')
+                    print(f'Rate limited. Contact support for higher limits. Waiting {wait_seconds} seconds before retrying...')
                     time.sleep(wait_seconds)
                     continue
                 elif response.status_code in [500, 502, 503, 504]:
