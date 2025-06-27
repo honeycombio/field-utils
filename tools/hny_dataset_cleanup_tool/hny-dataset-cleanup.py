@@ -6,9 +6,9 @@
 #
 # arguments:
 #   -h, --help              show this help message and exit
-#   -k API_KEY, --api-key   API_KEY
-#                           Honeycomb API key for your Environment, with Create Dataset permission
-#   -m {spammy,date,lastwritten} --mode {spammy,date,lastwritten}
+#   -k, --api-key           Honeycomb API key for your Environment, with Create Dataset permission
+#   -a, --api-host          Honeycomb API hostname (defaults to api.honeycomb.io)
+#   -m, --mode {spammy,date,lastwritten}
 #                           Type of datasets to clean up. `date` targets the `created_at` date.
 #                           `lastwritten` targets datasets with no writes since date.
 #   --date YYYY/MM/DD       ISO8601 date to be used with --mode date
@@ -25,31 +25,31 @@ import sys
 import signal
 import time
 import json
+import email.utils
 from datetime import date
 from datetime import datetime
 
-HONEYCOMB_API = 'https://api.honeycomb.io/1/'  # /columns/dataset_slug
 SPAMMY_STRINGS = [
                  'oastify', 'burp', 'xml', 'jndi', 'ldap', 'lol' # pentester
 		         '%','{', '(', '*', '!', '?', '<', '..', '|', '&', '"', '\'', '\r', '\n','`','--','u0','\\','@','\ufffd'
 ]
 
-def fetch_all_datasets(api_key):
+def fetch_all_datasets(api_key, api_url):
     """
     Fetch all datasets in an environment and return them all as json
     """
-    url = HONEYCOMB_API + 'datasets'
+    url = api_url + 'datasets'
     response = requests.get(url, headers={"X-Honeycomb-Team": api_key})
     if response.status_code != 200:
         print('Failure: Unable to list datasets:' + response.text)
         return
     return response.json()
 
-def list_spammy_datasets(api_key):
+def list_spammy_datasets(api_key, api_url):
     """
     List spammy datasets and return the list as an array of dataset IDs
     """
-    all_datasets = fetch_all_datasets(api_key)
+    all_datasets = fetch_all_datasets(api_key, api_url)
     spammy_dataset_slugs = {}
     for dataset in all_datasets:
         for spammy_string in SPAMMY_STRINGS:
@@ -58,11 +58,11 @@ def list_spammy_datasets(api_key):
                 break  # end the inner loop in case there's multiple matches in the same string
     return spammy_dataset_slugs
 
-def list_datasets_by_date(api_key, date):
+def list_datasets_by_date(api_key, api_url, date):
      """
      List datasets by date in a Environment and return the list as an array of dataset slugs. The created date is set in `dataset_created_date_string` for now.
      """
-     all_datasets = fetch_all_datasets(api_key)
+     all_datasets = fetch_all_datasets(api_key, api_url)
      matched_dataset_slugs = {}
      for dataset in all_datasets:
          created_at_date = datetime.fromisoformat(dataset['created_at']).date()
@@ -70,11 +70,11 @@ def list_datasets_by_date(api_key, date):
             matched_dataset_slugs[dataset['slug']] = dataset['slug']
      return matched_dataset_slugs
 
-def list_datasets_by_last_written_at(api_key, date):
+def list_datasets_by_last_written_at(api_key, api_url, date):
      """
      List datasets by date in a Environment and return the list as an array of dataset slugs. The created date is set in `dataset_created_date_string` for now.
      """
-     all_datasets = fetch_all_datasets(api_key)
+     all_datasets = fetch_all_datasets(api_key, api_url)
      matched_dataset_slugs = {}
      for dataset in all_datasets:
          last_written_at_date = datetime.fromisoformat(dataset['last_written_at']).date()
@@ -82,57 +82,60 @@ def list_datasets_by_last_written_at(api_key, date):
             matched_dataset_slugs[dataset['slug']] = dataset['slug']
      return matched_dataset_slugs
 
-def remove_delete_protection(api_key, is_dry_run, dataset_slugs):
+def parse_retry_after(retry_after):
     """
-    Remove delete protection on a defined set of datasets.
+    Parse the Retry-After header as an HTTP date (e.g., "Fri, 31 Dec 1999 23:59:59 GMT")
+    Returns the number of seconds to wait
     """
-    url = HONEYCOMB_API + 'datasets'
+    try:
+        # Parse as an HTTP date format
+        retry_date = email.utils.parsedate_to_datetime(retry_after)
+        now = datetime.now(retry_date.tzinfo)
+        delta = retry_date - now
+        # Add 1 second buffer to account for processing time
+        return max(1, int(delta.total_seconds()) + 1)
+    except (ValueError, TypeError):
+        # If parsing fails, return default of 30 seconds
+        return 30
+
+def handle_response(response, slug, action):
+    if response.status_code == 429:
+        retry_after = response.headers.get('Retry-After', '30')
+        wait_seconds = parse_retry_after(retry_after)
+        print(f'Rate limited. Contact support for higher limits. Waiting {wait_seconds} seconds before retrying...')
+        time.sleep(wait_seconds)
+        return True
+    elif response.status_code in [500, 502, 503, 504]:
+        print('Received a retryable error ' + str(response.status_code) + ' sleeping and retrying...')
+        time.sleep(30)
+        return True
+    elif response.status_code != 200 and response.status_code != 202:
+        print('Failed: Unable to ' + action + ' dataset slug ' + slug + ': ' + response.text)
+        print('Moving on to the next dataset...')
+    return False
+
+def remove_delete_protection(api_key, api_url, is_dry_run, dataset_slugs):
+    url = api_url + 'datasets'
     headers = {"X-Honeycomb-Team": api_key}
     payload = '{"settings": {"delete_protected": false}}'
     for slug in dataset_slugs.keys():
         print('Removing delete protection from dataset slug: ' + slug + '...')
-
         if not is_dry_run:
-            response = requests.put(url + '/' + slug, headers=headers, data=payload)
-
-            # A tiny bit of error handling
-            if response.status_code in [429, 500, 502, 503, 504]:
-                print('Received a retryable error ' +
-                      str(response.status_code) + ' sleeping and retrying...')
-                # Put a long-ish sleep here to cope with the default rate limit of 10 requests per minute
-                time.sleep(30)
+            while True:
                 response = requests.put(url + '/' + slug, headers=headers, data=payload)
-            elif response.status_code != 200:
-                print(response.status_code)
-                print('Failed: Unable to remove delete protection from dataset slug' +
-                      slug + ': ' + response.text)
-                print('Moving on to the next dataset...')
+                if not handle_response(response, slug, 'remove delete protection from'):
+                    break
 
-
-def delete_datasets(api_key, is_dry_run, dataset_slugs):
-    """
-    Delete datasets from a provided array of dataset IDs
-    """
-    url = HONEYCOMB_API + 'datasets'
+def delete_datasets(api_key, api_url, is_dry_run, dataset_slugs):
+    url = api_url + 'datasets'
     headers = {"X-Honeycomb-Team": api_key}
     for slug in dataset_slugs.keys():
         print('Deleting dataset slug: ' + slug + '...')
-
         if not is_dry_run:
-            response = requests.delete(url + '/' + slug, headers=headers)
-
-            # A tiny bit of error handling
-            if response.status_code in [429, 500, 502, 503, 504]:
-                print('Received a retryable error ' +
-                      str(response.status_code) + ' sleeping and retrying...')
-                # Put a long-ish sleep here to cope with the default rate limit of 10 requests per minute
-                time.sleep(30)
+            while True:
                 response = requests.delete(url + '/' + slug, headers=headers)
-            elif response.status_code != 202:
-                print('Failed: Unable to delete dataset slug' +
-                      slug + ': ' + response.text)
-                print('Moving on to the next dataset...')
-
+                if not handle_response(response, slug, 'delete'):
+                    break
 
 if __name__ == "__main__":
     try:
@@ -141,6 +144,8 @@ if __name__ == "__main__":
             description='Honeycomb Dataset Cleanup tool for Environments')
         parser.add_argument('-k', '--api-key',
                             help='Honeycomb API key', required=True)
+        parser.add_argument('-a', '--api-host', default='api.honeycomb.io',
+                            help='Honeycomb API hostname (defaults to api.honeycomb.io)')
         parser.add_argument('-m', '--mode', default='spammy',
                             choices=['spammy', 'date', 'lastwritten'], help='Type of datasets to clean up')
         parser.add_argument('--dry-run', default=False,
@@ -149,23 +154,26 @@ if __name__ == "__main__":
                             help='Search for datasets to clean up created on date (YYYY-MM-DD)')
         args = parser.parse_args()
 
+        # Construct the full API URL from the hostname
+        api_url = f'https://{args.api_host}/1/'
+
         datasets_to_delete = {}
 
         if args.mode == 'spammy':
-            datasets_to_delete = list_spammy_datasets(args.api_key)
+            datasets_to_delete = list_spammy_datasets(args.api_key, api_url)
         elif (args.mode == 'date' and args.date is not None):
-            datasets_to_delete = list_datasets_by_date(args.api_key, args.date)
+            datasets_to_delete = list_datasets_by_date(args.api_key, api_url, args.date)
         elif (args.mode == 'lastwritten' and args.date is not None):
-            datasets_to_delete = list_datasets_by_last_written_at(args.api_key, args.date)
+            datasets_to_delete = list_datasets_by_last_written_at(args.api_key, api_url, args.date)
         else:
             parser.error('--date YYYY-MM-DD is required when using --mode date')
 
         if len(datasets_to_delete.keys()) > 0:
-            remove_delete_protection(args.api_key,
+            remove_delete_protection(args.api_key, api_url,
                                        args.dry_run, datasets_to_delete)
             print('Removed delete protection for ' + str(len(datasets_to_delete.keys())) +
                   ' ' + args.mode + ' datasets.')
-            delete_datasets(args.api_key,
+            delete_datasets(args.api_key, api_url,
                            args.dry_run, datasets_to_delete)
             print('Deleted ' + str(len(datasets_to_delete.keys())) +
                   ' ' + args.mode + ' datasets! Enjoy your clean environment!')
