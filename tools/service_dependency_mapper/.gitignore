@@ -1,0 +1,42 @@
+# Database files
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+
+# JSON output files
+dependencies.json
+*_dependencies.json
+*_export.json
+*.json
+
+# CSV output files
+*.csv
+
+# Service list files (may contain sensitive info)
+services.txt
+sample_services.txt
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Environment files
+.env
+.env.local
+
+# API keys
+api_key.txt
+*.key
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Keep example files
+!services.txt.example
+!api.json
