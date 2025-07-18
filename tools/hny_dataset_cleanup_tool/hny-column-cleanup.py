@@ -133,8 +133,12 @@ def delete_columns(dataset, api_key, api_url, is_dry_run, column_ids):
     url = api_url + 'columns/' + dataset
     headers = {"X-Honeycomb-Team": api_key}
     for id in column_ids.keys():
-        print('Deleting column ID: ' + id +
-              ' Name: ' + column_ids[id] + '...')
+        if is_dry_run:
+            print('Dry run: would delete column ID: ' + id +
+                  ' Name: ' + column_ids[id] + '...')
+        else:
+            print('Deleting column ID: ' + id +
+                  ' Name: ' + column_ids[id] + '...')
 
         if not is_dry_run:
             while True:
@@ -198,10 +202,16 @@ if __name__ == "__main__":
             parser.error('--date YYYY-MM-DD is required when using --mode ' + args.mode)
 
         if len(columns_to_delete.keys()) > 0:
+            if not args.dry_run:
+                print("WARNING: Dry run disabled - this will delete live columns!")
             delete_columns(args.dataset, args.api_key, api_url,
                            args.dry_run, columns_to_delete)
-            print('Deleted ' + str(len(columns_to_delete.keys())) +
-                  ' ' + args.mode + ' columns! Enjoy your clean dataset!')
+            if args.dry_run:
+                print('Dry run completed: Would have deleted ' + str(len(columns_to_delete.keys())) +
+                      ' ' + args.mode + ' columns!')
+            else:
+                print('Deleted ' + str(len(columns_to_delete.keys())) +
+                      ' ' + args.mode + ' columns! Enjoy your clean dataset!')
 
     except KeyboardInterrupt:  # Suppress tracebacks on SIGINT
         print('\nExiting early, not done ...\n')
