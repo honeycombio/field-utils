@@ -202,8 +202,6 @@ if __name__ == "__main__":
             parser.error('--date YYYY-MM-DD is required when using --mode ' + args.mode)
 
         if len(columns_to_delete.keys()) > 0:
-            if not args.dry_run:
-                print("WARNING: Dry run disabled - this will delete live columns!")
             delete_columns(args.dataset, args.api_key, api_url,
                            args.dry_run, columns_to_delete)
             if args.dry_run:

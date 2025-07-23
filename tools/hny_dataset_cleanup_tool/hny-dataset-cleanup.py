@@ -119,7 +119,10 @@ def remove_delete_protection(api_key, api_url, is_dry_run, dataset_slugs):
     headers = {"X-Honeycomb-Team": api_key}
     payload = '{"settings": {"delete_protected": false}}'
     for slug in dataset_slugs.keys():
-        print('Removing delete protection from dataset slug: ' + slug + '...')
+        if is_dry_run:
+            print('Dry run: would remove delete protection from dataset slug: ' + slug + '...')
+        else:
+            print('Removing delete protection from dataset slug: ' + slug + '...')
         if not is_dry_run:
             while True:
                 response = requests.put(url + '/' + slug, headers=headers, data=payload)
@@ -130,7 +133,10 @@ def delete_datasets(api_key, api_url, is_dry_run, dataset_slugs):
     url = api_url + 'datasets'
     headers = {"X-Honeycomb-Team": api_key}
     for slug in dataset_slugs.keys():
-        print('Deleting dataset slug: ' + slug + '...')
+        if is_dry_run:
+            print('Dry run: would delete dataset slug: ' + slug + '...')
+        else:
+            print('Deleting dataset slug: ' + slug + '...')
         if not is_dry_run:
             while True:
                 response = requests.delete(url + '/' + slug, headers=headers)
@@ -171,12 +177,20 @@ if __name__ == "__main__":
         if len(datasets_to_delete.keys()) > 0:
             remove_delete_protection(args.api_key, api_url,
                                        args.dry_run, datasets_to_delete)
-            print('Removed delete protection for ' + str(len(datasets_to_delete.keys())) +
-                  ' ' + args.mode + ' datasets.')
+            if args.dry_run:
+                print('Dry run: would remove delete protection for ' + str(len(datasets_to_delete.keys())) +
+                      ' ' + args.mode + ' datasets.')
+            else:
+                print('Removed delete protection for ' + str(len(datasets_to_delete.keys())) +
+                      ' ' + args.mode + ' datasets.')
             delete_datasets(args.api_key, api_url,
                            args.dry_run, datasets_to_delete)
-            print('Deleted ' + str(len(datasets_to_delete.keys())) +
-                  ' ' + args.mode + ' datasets! Enjoy your clean environment!')
+            if args.dry_run:
+                print('Dry run: would delete ' + str(len(datasets_to_delete.keys())) +
+                      ' ' + args.mode + ' datasets! Run without --dry-run to actually delete them.')
+            else:
+                print('Deleted ' + str(len(datasets_to_delete.keys())) +
+                      ' ' + args.mode + ' datasets! Enjoy your clean environment!')
 
     except KeyboardInterrupt:  # Suppress tracebacks on SIGINT
         print('\nExiting early, not done ...\n')
