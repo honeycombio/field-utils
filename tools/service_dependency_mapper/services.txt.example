@@ -1,0 +1,43 @@
+# Example services file for dependency_fetcher.py
+# One service name per line
+# Lines starting with # are ignored as comments
+
+# Frontend services
+web-frontend
+mobile-api
+admin-portal
+
+# Core services
+user-service
+auth-service
+session-service
+profile-service
+
+# Business logic services
+order-service
+payment-service
+inventory-service
+shipping-service
+notification-service
+
+# Data services
+search-service
+recommendation-service
+analytics-service
+
+# Infrastructure services
+api-gateway
+rate-limiter
+cache-service
+queue-processor
+
+# External integrations
+payment-gateway-adapter
+shipping-provider-adapter
+email-sender
+sms-gateway
+
+# Background workers
+report-generator
+data-aggregator
+cleanup-worker
