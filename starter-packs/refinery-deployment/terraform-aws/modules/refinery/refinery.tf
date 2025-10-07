@@ -15,10 +15,11 @@ resource "aws_instance" "refinery_servers" {
   }
 
   tags = {
-    Name      = "${var.system_name_prefix}-${var.refinery_servers[count.index]}"
-    X-Contact = var.contact_tag_value
-    X-Dept    = var.department_tag_value
-    Date      = formatdate("MMM DD, YYYY", timestamp())
+    Name       = "${var.system_name_prefix}-${var.refinery_servers[count.index]}"
+    X-Contact  = var.contact_tag_value
+    X-Dept     = var.department_tag_value
+    Date       = formatdate("MMM DD, YYYY", timestamp())
+    aws-apn-id = "pc:4cs7oby7dg5rzww2ys7u09nd7"
   }
 
   provisioner "file" {
