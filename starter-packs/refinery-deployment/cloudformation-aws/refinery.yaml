@@ -305,6 +305,9 @@ Resources:
       - Key: X-Contact
         Value: !Ref ContactEmail
         PropagateAtLaunch: true
+      - Key: aws-apn-id
+        Value: pc:4cs7oby7dg5rzww2ys7u09nd7
+        PropagateAtLaunch: true
       VPCZoneIdentifier: !Ref RefineryServerSubnets
     UpdatePolicy:
       AutoScalingRollingUpdate:
